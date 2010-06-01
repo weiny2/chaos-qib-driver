@@ -11,10 +11,10 @@ BuildRequires: chaos-kernel-devel
 %define relext _%(echo %{kver}|sed -e 's/-/_/g')
 %endif
 
-Name:
-Version:
-Release:
-Source:
+Name: qib
+Version: %(grep Version META | sed -e 's/.*:\(.*\)/\1/')
+Release: test
+Source: qib-%{version}.tgz
 
 Summary: QLogic QIB driver
 Packager: Ira Weiny <weiny2@llnl.gov>
