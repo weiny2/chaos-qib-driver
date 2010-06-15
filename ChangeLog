@@ -1,0 +1,9 @@
+2010-06-15 Ira Weiny <weiny2@llnl.gov>
+
+        * Tag 1.5.2-2
+        * Cherry pick d506032e6aefbaa16a1f600773a49519d65ad84d
+	  "Revert last patch (Turn off low latency mode in serdes)"
+
+2010-06-14 Ira Weiny <weiny2@llnl.gov>
+        * Tag 1.5.2-1
+
