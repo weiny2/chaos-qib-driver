@@ -1,3 +1,8 @@
+2010-06-16 Ira Weiny <weiny2@llnl.gov>
+
+        * Tag 1.5.2-3
+        * Set node description to hostname at load time
+
 2010-06-15 Ira Weiny <weiny2@llnl.gov>
 
         * Tag 1.5.2-2
