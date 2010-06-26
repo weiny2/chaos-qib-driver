@@ -1,3 +1,8 @@
+2010-06-26 Ira Weiny <weiny2@llnl.gov>
+
+        * Tag 1.5.2-4
+        * add depmod -a to post in rpm
+
 2010-06-16 Ira Weiny <weiny2@llnl.gov>
 
         * Tag 1.5.2-3
