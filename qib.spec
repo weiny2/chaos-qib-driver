@@ -12,7 +12,7 @@ BuildRequires: chaos-kernel-devel
 %endif
 
 Name: qib
-Version: %(grep Version META | sed -e 's/.*:\(.*\)/\1/')
+Version: 1.5.2
 Release: test
 Source: qib-%{version}.tgz
 
@@ -42,4 +42,7 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root)
 /lib/modules/*
+
+%post
+depmod -a
 
