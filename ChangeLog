@@ -1,5 +1,6 @@
 2010-09-16 Ira Weiny <weiny2@llnl.gov>
 
+	* Tag 1.5.2-10_2chaos
 	* Add kernel version to depmod command in rpm to ensure proper depmod
 	  on upgrade.
 
