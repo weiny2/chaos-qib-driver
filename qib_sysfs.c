@@ -608,6 +608,25 @@ static ssize_t show_nctxts(struct class_device *cdev, char *buf)
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
 	struct qib_devdata *dd = dd_from_dev(dev);
+	int i;
+
+	printk(KERN_ERR "Context debug data: first user ctx %d\n",
+		dd->first_user_ctxt);
+
+	for (i = 0; i < dd->first_user_ctxt; i++) {
+		struct qib_ctxtdata *rcd = dd->rcd[i];
+		if (!rcd)
+			continue;
+		printk(KERN_ERR "%d: lval %llx = %llx | %llx\n",
+			i,
+			((u64)rcd->head | dd->rhdrhead_intr_off),
+			(u64)rcd->head, dd->rhdrhead_intr_off
+			);
+			/*
+		printk(KERN_ERR "   timeout: %d\n",
+			dd->cspec->rcvavail_timeout[rcd->ctxt]);
+			*/
+	}
 
 	/* Return the number of user ports (contexts) available. */
 	return scnprintf(buf, PAGE_SIZE, "%u\n", dd->cfgctxts -

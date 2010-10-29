@@ -3094,6 +3094,7 @@ static irqreturn_t qib_7322intr(int irq, void *data)
 	 */
 	ctxtrbits = istat & (QIB_I_RCVAVAIL_MASK | QIB_I_RCVURG_MASK);
 	if (ctxtrbits) {
+printk(KERN_ERR "IKW ERROR Should not be here!!!\n");
 		rmask = (1ULL << QIB_I_RCVAVAIL_LSB) |
 			(1ULL << QIB_I_RCVURG_LSB);
 		for (i = 0; i < dd->first_user_ctxt; i++) {
