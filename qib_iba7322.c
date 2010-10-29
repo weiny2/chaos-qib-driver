@@ -90,8 +90,17 @@ static void ibsd_wr_allchans(struct qib_pportdata *, int, unsigned, unsigned);
 #define IBSD(hw_pidx) (hw_pidx + 2)
 
 /* these are variables for documentation and experimentation purposes */
-static const unsigned rcv_int_timeout = 0;
-static const unsigned rcv_int_count = 1;
+static int rcv_int_timeout = 0;
+static int rcv_int_count = 1;
+module_param_named(rcv_int_timeout, rcv_int_timeout, int, S_IRUGO);
+MODULE_PARM_DESC(rcv_int_timeout, "Set irq coalescing timeout");
+module_param_named(rcv_int_count, rcv_int_count, int, S_IRUGO);
+MODULE_PARM_DESC(rcv_int_count, "Set irq coalescing count");
+
+static int rcv_hdr_cnt_override = 0;
+module_param_named(rcv_hdr_cnt_override, rcv_hdr_cnt_override, int, S_IRUGO);
+MODULE_PARM_DESC(rcv_hdr_cnt_override, "rcvhdrcnt_override");
+
 static const unsigned sdma_idle_cnt = 64;
 
 /* Time to stop altering Rx Equalization parameters, after link up. */
@@ -3009,7 +3018,7 @@ static void adjust_rcv_timeout(struct qib_ctxtdata *rcd, int npkts)
 	if (npkts < rcv_int_count && timeout > 2)
 		timeout >>= 1;
 	else if (npkts >= rcv_int_count && timeout < rcv_int_timeout)
-		timeout = min(timeout << 1, rcv_int_timeout);
+		timeout = min(timeout << 1, (unsigned)rcv_int_timeout);
 	else
 		return;
 
@@ -3896,7 +3905,10 @@ static void qib_7322_config_ctxts(struct qib_devdata *dd)
 
 	/* kr_rcvegrcnt changes based on the number of contexts enabled */
 	dd->cspec->rcvegrcnt = qib_read_kreg32(dd, kr_rcvegrcnt);
-	dd->rcvhdrcnt = max(dd->cspec->rcvegrcnt,
+	if (rcv_hdr_cnt_override)
+		dd->rcvhdrcnt = rcv_hdr_cnt_override;
+	else
+		dd->rcvhdrcnt = max(dd->cspec->rcvegrcnt,
 				dd->num_pports > 1 ? 1024U : 2048U);
 }
 
