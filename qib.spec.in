@@ -13,7 +13,7 @@ BuildRequires: chaos-kernel-devel
 
 Name: qib
 Version: #VERSION#
-Release: test
+Release: test_gpfs_v1%(date +%Y%m%d%H%M)
 Source: qib-%{version}.tgz
 
 Summary: QLogic QIB driver

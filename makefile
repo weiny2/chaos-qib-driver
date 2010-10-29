@@ -1,5 +1,5 @@
 VERSION=$(shell grep Version META | sed -e "s/Version:[ \t]*\(.*\)/\1/")
-RELEASE=test
+RELEASE=test_gpfs_v1$(shell date +%Y%m%d%H%M)
 KERNVER=$(shell uname -r)
 KERNDIR=/usr/src/kernels/$(KERNVER)
 
