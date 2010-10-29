@@ -113,7 +113,6 @@ static int qib_make_rc_ack(struct qib_ibdev *dev, struct qib_qp *qp,
 	case OP(ACKNOWLEDGE):
 		/* Check for no next entry in the queue. */
 		if (qp->r_head_ack_queue == qp->s_tail_ack_queue) {
-			qp->send_proc_id = qp->processor_id;
 			if (qp->s_flags & QIB_S_ACK_PENDING)
 				goto normal;
 			goto bail;
@@ -2078,7 +2077,10 @@ send_last:
 			goto nack_op_err;
 		if (!ret)
 			goto rnr_nak;
-		goto send_last_imm;
+		wc.ex.imm_data = ohdr->u.rc.imm_data;
+		hdrsize += 4;
+		wc.wc_flags |= IB_WC_WITH_IMM;
+		goto send_last;
 
 	case OP(RDMA_READ_REQUEST): {
 		struct qib_ack_entry *e;
@@ -2142,7 +2144,6 @@ send_last:
 		qp->r_head_ack_queue = next;
 
 		/* Schedule the send tasklet on the current processor. */
-		qp->send_proc_id = smp_processor_id();
 		qp->s_flags |= QIB_S_RESP_PENDING;
 		qib_schedule_send(qp);
 
