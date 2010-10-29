@@ -90,8 +90,8 @@ static void ibsd_wr_allchans(struct qib_pportdata *, int, unsigned, unsigned);
 #define IBSD(hw_pidx) (hw_pidx + 2)
 
 /* these are variables for documentation and experimentation purposes */
-static const unsigned rcv_int_timeout = 375;
-static const unsigned rcv_int_count = 16;
+static const unsigned rcv_int_timeout = 0;
+static const unsigned rcv_int_count = 1;
 static const unsigned sdma_idle_cnt = 64;
 
 /* Time to stop altering Rx Equalization parameters, after link up. */
