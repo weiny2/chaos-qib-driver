@@ -3896,8 +3896,8 @@ static void qib_7322_config_ctxts(struct qib_devdata *dd)
 
 	/* kr_rcvegrcnt changes based on the number of contexts enabled */
 	dd->cspec->rcvegrcnt = qib_read_kreg32(dd, kr_rcvegrcnt);
-	dd->rcvhdrcnt = 32768; // max(dd->cspec->rcvegrcnt,
-			//	dd->num_pports > 1 ? 1024U : 2048U);
+	dd->rcvhdrcnt = max(dd->cspec->rcvegrcnt,
+				dd->num_pports > 1 ? 1024U : 2048U);
 }
 
 static int qib_7322_get_ib_cfg(struct qib_pportdata *ppd, int which)
