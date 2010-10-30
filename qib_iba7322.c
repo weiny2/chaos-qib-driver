@@ -90,14 +90,15 @@ static void ibsd_wr_allchans(struct qib_pportdata *, int, unsigned, unsigned);
 #define IBSD(hw_pidx) (hw_pidx + 2)
 
 /* these are variables for documentation and experimentation purposes */
-static int rcv_int_timeout = 0;
-static int rcv_int_count = 1;
+/* default irq Coalescence off */
+static unsigned int rcv_int_timeout = 0;
+static unsigned int rcv_int_count = 1;
 module_param_named(rcv_int_timeout, rcv_int_timeout, int, S_IRUGO);
 MODULE_PARM_DESC(rcv_int_timeout, "Set irq coalescing timeout");
 module_param_named(rcv_int_count, rcv_int_count, int, S_IRUGO);
 MODULE_PARM_DESC(rcv_int_count, "Set irq coalescing count");
 
-static int rcv_hdr_cnt_override = 0;
+static unsigned int rcv_hdr_cnt_override = 0;
 module_param_named(rcv_hdr_cnt_override, rcv_hdr_cnt_override, int, S_IRUGO);
 MODULE_PARM_DESC(rcv_hdr_cnt_override, "rcvhdrcnt_override");
 
@@ -3018,7 +3019,7 @@ static void adjust_rcv_timeout(struct qib_ctxtdata *rcd, int npkts)
 	if (npkts < rcv_int_count && timeout > 2)
 		timeout >>= 1;
 	else if (npkts >= rcv_int_count && timeout < rcv_int_timeout)
-		timeout = min(timeout << 1, (unsigned)rcv_int_timeout);
+		timeout = min(timeout << 1, rcv_int_timeout);
 	else
 		return;
 
