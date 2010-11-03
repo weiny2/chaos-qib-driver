@@ -1,3 +1,6 @@
+2010-11-02 Albert Chu <chu11@llnl.gov>
+	* Tag 1.5.2-20_1chaos
+
 2010-11-03 Avneesh Pant <avneesh.pant@qlogic.com>
 	* Tag 1.5.2-20
 	* Avoid doing duplicate writes to the receive header queue register
