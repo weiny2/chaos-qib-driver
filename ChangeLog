@@ -1,5 +1,73 @@
-2010-11-02 Albert Chu <chu11@llnl.gov>
-	* Tag 1.5.2-20_1chaos
+2011-02-03 Ira Weiny <weiny2@llnl.gov>
+	* Tag 1.5.2-37_1chaos
+
+2011-01-19 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-37
+	* Remove unused field
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-36
+	* Hold link for Tx SERDES settings
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-35
+	* fix refcount leak in lkey/rkey validation
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-34
+	* Un-necessary delayed completions on RC connection
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-33
+	* Issue pre-emptive NAKs on eager buffer overflow
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-32
+	* RDMA lkey/rkey validation is inefficient for GPFS
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-31
+	* change rcv queue/qpn selection
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-30
+	* Add a few new SERDES tunings
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-29
+	* Reset packet list after freeing
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-28
+	* New SERDES init routine and improvements to SI quality
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-27
+	* fix context allocation with multiple HCAs
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-26
+	* Multi Florida HCA Hosts panic on reboot
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-25
+	* UD send with immediate Rx completion has wrong size
+
+2011-01-18 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-24
+	* generate completion callback on errors
+
+2011-01-17 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-23
+	* add thresholds to VendorPortCounters PMA operation
+
+2011-01-17 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-22
+	* add support for the new QME7362 card
+
+2011-01-17 Mitko Haralanov <mitko@qlogic.com>
+	* Tag 1.5.2-21
+	* fix race between qib_error_qp() and receive packet processing
 
 2010-11-03 Avneesh Pant <avneesh.pant@qlogic.com>
 	* Tag 1.5.2-20
@@ -7,6 +75,9 @@
 	  with a zero and non-zero interrupt count. If the context results in 
 	  header queue full between the writes the chip will never generate a
 	  receive available interrupt leading to deadlock.
+
+2010-11-02 Albert Chu <chu11@llnl.gov>
+	* Tag 1.5.2-20_1chaos
 
 2010-11-01 Avneesh Pant <avneesh.pant@qlogic.com>
 	* Tag 1.5.2-19

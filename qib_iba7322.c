@@ -78,6 +78,9 @@ static void qib_7322_mini_pcs_reset(struct qib_pportdata *);
 
 static u32 ahb_mod(struct qib_devdata *, int, int, int, u32, u32);
 static void ibsd_wr_allchans(struct qib_pportdata *, int, unsigned, unsigned);
+static void serdes_7322_los_enable(struct qib_pportdata *, int);
+static int serdes_7322_init_old(struct qib_pportdata *);
+static int serdes_7322_init_new(struct qib_pportdata *);
 
 #define BMASK(msb, lsb) (((1 << ((msb) + 1 - (lsb))) - 1) << (lsb))
 
@@ -572,6 +575,7 @@ static void write_tx_serdes_param(struct qib_pportdata *, struct txdds_ent *);
 
 #define TXDDS_TABLE_SZ 16 /* number of entries per speed in onchip table */
 #define TXDDS_EXTRA_SZ 13 /* number of extra tx settings entries */
+#define TXDDS_MFG_SZ 2    /* number of mfg tx settings entries */
 #define SERDES_CHANS 4 /* yes, it's obvious, but one less magic number */
 
 #define H1_FORCE_VAL 8
@@ -1788,6 +1792,8 @@ static void handle_serdes_issues(struct qib_pportdata *ppd, u64 ibcst)
 	    (ibcst & SYM_MASK(IBCStatusA_0, LinkSpeedQDR))) {
 		force_h1(ppd);
 		ppd->cpspec->qdr_reforce = 1;
+		if (!ppd->dd->cspec->r1)
+			serdes_7322_los_enable(ppd, 0);
 	} else if (ppd->cpspec->qdr_reforce &&
 		(ibcst & SYM_MASK(IBCStatusA_0, LinkSpeedQDR)) &&
 		 (ibclt == IB_7322_LT_STATE_CFGENH ||
@@ -1803,17 +1809,31 @@ static void handle_serdes_issues(struct qib_pportdata *ppd, u64 ibcst)
 	      ibclt <= IB_7322_LT_STATE_SLEEPQUIET)))
 			adj_tx_serdes(ppd);
 
-	if (!ppd->cpspec->qdr_dfe_on && ibclt != IB_7322_LT_STATE_LINKUP &&
-	    ibclt <= IB_7322_LT_STATE_SLEEPQUIET) {
-		ppd->cpspec->qdr_dfe_on = 1;
-		ppd->cpspec->qdr_dfe_time = 0;
-		/* On link down, reenable QDR adaptation */
-		qib_write_kreg_port(ppd, krp_static_adapt_dis(2),
-			ppd->dd->cspec->r1 ?
-				    QDR_STATIC_ADAPT_DOWN_R1 :
-				    QDR_STATIC_ADAPT_DOWN);
-		qib_cdbg(LINKVERB, "IB%u:%u re-enabled QDR adaptation "
-			 "ibclt %x\n", ppd->dd->unit, ppd->port, ibclt);
+	if (ibclt != IB_7322_LT_STATE_LINKUP) {
+		u8 ltstate = qib_7322_phys_portstate(ibcst);
+		u8 pibclt = (u8)SYM_FIELD(ppd->lastibcstat, IBCStatusA_0,
+					  LinkTrainingState);
+		if (!ppd->dd->cspec->r1 &&
+		    pibclt == IB_7322_LT_STATE_LINKUP &&
+		    ltstate != IB_PHYSPORTSTATE_LINK_ERR_RECOVER &&
+		    ltstate != IB_PHYSPORTSTATE_RECOVERY_RETRAIN &&
+		    ltstate != IB_PHYSPORTSTATE_RECOVERY_WAITRMT &&
+		    ltstate != IB_PHYSPORTSTATE_RECOVERY_IDLE)
+			/* If the link went down (but no into recovery,
+			 * turn LOS back on */
+			serdes_7322_los_enable(ppd, 1);
+		if (!ppd->cpspec->qdr_dfe_on &&
+		    ibclt <= IB_7322_LT_STATE_SLEEPQUIET) {
+			ppd->cpspec->qdr_dfe_on = 1;
+			ppd->cpspec->qdr_dfe_time = 0;
+			/* On link down, reenable QDR adaptation */
+			qib_write_kreg_port(ppd, krp_static_adapt_dis(2),
+					    ppd->dd->cspec->r1 ?
+					    QDR_STATIC_ADAPT_DOWN_R1 :
+					    QDR_STATIC_ADAPT_DOWN);
+			qib_cdbg(LINKVERB, "IB%u:%u re-enabled QDR adaptation "
+				 "ibclt %x\n", ppd->dd->unit, ppd->port, ibclt);
+		}
 	}
 }
 
@@ -2520,6 +2540,14 @@ static int qib_7322_bringup_serdes(struct qib_pportdata *ppd)
 	ppd->p_rcvctrl |= SYM_MASK(RcvCtrl_0, RcvIBPortEnable);
 	qib_write_kreg_port(ppd, krp_rcvctrl, ppd->p_rcvctrl);
 	spin_unlock_irqrestore(&dd->cspec->rcvmod_lock, flags);
+
+	/* Hold the link state machine for mezz boards */
+	if (IS_QMH(dd) || IS_QME(dd)) {
+		qib_cdbg(LINKVERB, "IB%u:%u Holding link state machine\n",
+			 dd->unit, ppd->port);
+		qib_set_ib_7322_lstate(ppd, 0,
+				       QLOGIC_IB_IBCC_LINKINITCMD_DISABLE);
+	}
 
 	/* Also enable IBSTATUSCHG interrupt.  */
 	val = qib_read_kreg_port(ppd, krp_errmask);
@@ -3524,6 +3552,10 @@ static unsigned qib_7322_boardname(struct qib_devdata *dd)
 	case BOARD_QME7342:
 		n = "InfiniPath_QME7342";
 		break;
+	case 8:
+		n = "InfiniPath_QME7362";
+		dd->flags |= QIB_HAS_QSFP;
+		break;
 	case 15:
 		n = "InfiniPath_QLE7342_TEST";
 		dd->flags |= QIB_HAS_QSFP;
@@ -3849,11 +3881,6 @@ static void qib_7322_config_ctxts(struct qib_devdata *dd)
 	nchipctxts = qib_read_kreg32(dd, kr_contextcnt);
 	dd->cspec->numctxts = nchipctxts;
 	if (qib_n_krcv_queues > 1 && dd->num_pports) {
-		/*
-		 * Set the mask for which bits from the QPN are used
-		 * to select a context number.
-		 */
-		dd->qpn_mask = 0x3f;
 		dd->first_user_ctxt = NUM_IB_PORTS +
 			(qib_n_krcv_queues - 1) * dd->num_pports;
 		if (dd->first_user_ctxt > nchipctxts)
@@ -6069,6 +6096,7 @@ static void set_no_qsfp_atten(struct qib_devdata *dd, int change)
 	u32 pidx, unit, port, deflt, h1;
 	unsigned long val;
 	int any = 0, seth1;
+	int txdds_size;
 
 	str = txselect_list;
 
@@ -6076,6 +6104,10 @@ static void set_no_qsfp_atten(struct qib_devdata *dd, int change)
 	deflt = simple_strtoul(str, &nxt, 0);
 	for (pidx = 0; pidx < dd->num_pports; ++pidx)
 		dd->pport[pidx].cpspec->no_eep = deflt;
+
+	txdds_size = TXDDS_TABLE_SZ + TXDDS_EXTRA_SZ;
+	if (IS_QME(dd) || IS_QMH(dd))
+		txdds_size += TXDDS_MFG_SZ;
 
 	while (*nxt && nxt[1]) {
 		str = ++nxt;
@@ -6102,7 +6134,7 @@ static void set_no_qsfp_atten(struct qib_devdata *dd, int change)
 				;
 			continue;
 		}
-		if (val >= (TXDDS_TABLE_SZ + TXDDS_EXTRA_SZ)) {
+		if (val >= txdds_size) {
 			qib_dbg("Out of range atten value at \"%s\"\n", str);
 			continue;
 		}
@@ -6129,6 +6161,15 @@ static void set_no_qsfp_atten(struct qib_devdata *dd, int change)
 				 ppd->cpspec->h1_val = h1;
 			/* now change the IBC and serdes, overriding generic */
 			init_txdds_table(ppd, 1);
+			/* Re-enable the physical state machine on mezz boards
+			 * now that the correct settings have been set. */
+			if (IS_QMH(dd) || IS_QME(dd)) {
+				qib_cdbg(LINKVERB, "IB%u:%u Re-enable "
+					 "phys state machine\n",
+					 dd->unit, ppd->port);
+				qib_set_ib_7322_lstate(ppd, 0,
+					    QLOGIC_IB_IBCC_LINKINITCMD_SLEEP);
+			}
 			any++;
 		}
 		if (*nxt == '\n')
@@ -6157,10 +6198,11 @@ static int setup_txselect(const char *str, struct kernel_param *kp)
 		return -ENOSPC;
 	}
 	val = simple_strtoul(str, &n, 0);
-	if (n == str || val >= (TXDDS_TABLE_SZ + TXDDS_EXTRA_SZ)) {
+	if (n == str || val >= (TXDDS_TABLE_SZ + TXDDS_EXTRA_SZ +
+				TXDDS_MFG_SZ)) {
 		printk(KERN_INFO QIB_DRV_NAME
 		       "txselect_values must start with a number < %d\n",
-			TXDDS_TABLE_SZ + TXDDS_EXTRA_SZ);
+			TXDDS_TABLE_SZ + TXDDS_EXTRA_SZ + TXDDS_MFG_SZ);
 		return -EINVAL;
 	}
 	strcpy(txselect_list, str);
@@ -6309,7 +6351,8 @@ static void write_7322_initregs(struct qib_devdata *dd)
 		unsigned n, regno;
 		unsigned long flags;
 
-		if (!dd->qpn_mask || !dd->pport[pidx].link_speed_supported)
+		if (dd->n_krcv_queues < 2 ||
+			!dd->pport[pidx].link_speed_supported)
 			continue;
 
 		ppd = &dd->pport[pidx];
@@ -7630,6 +7673,12 @@ static const struct txdds_ent txdds_extra_qdr[TXDDS_EXTRA_SZ] = {
 	{  0, 1,  0, 12 },	/* QMH7342 backplane settings */
 };
 
+static const struct txdds_ent txdds_extra_mfg[TXDDS_MFG_SZ] = {
+	/* amp, pre, main, post */
+	{ 0, 0, 0, 0 },         /* QME7342 mfg settings */
+	{ 0, 0, 0, 6 },         /* QME7342 P2 mfg settings */
+};
+
 static const struct txdds_ent *get_atten_table(const struct txdds_ent *txdds,
 					       unsigned atten)
 {
@@ -7709,6 +7758,15 @@ static void find_best_ent(struct qib_pportdata *ppd,
 		*sdr_dds = &txdds_extra_sdr[idx];
 		*ddr_dds = &txdds_extra_ddr[idx];
 		*qdr_dds = &txdds_extra_qdr[idx];
+	} else if ((IS_QME(ppd->dd) || IS_QMH(ppd->dd)) &&
+		   ppd->cpspec->no_eep < (TXDDS_TABLE_SZ + TXDDS_EXTRA_SZ +
+					  TXDDS_MFG_SZ)) {
+		idx = ppd->cpspec->no_eep - (TXDDS_TABLE_SZ + TXDDS_EXTRA_SZ);
+		qib_cdbg(INIT, "IB%u:%u use idx %u into txdds_mfg\n",
+			 ppd->dd->unit, ppd->port, idx);
+		*sdr_dds = &txdds_extra_mfg[idx];
+		*ddr_dds = &txdds_extra_mfg[idx];
+		*qdr_dds = &txdds_extra_mfg[idx];
 	} else {
 		/* this shouldn't happen, it's range checked */
 		qib_dbg("IB%u:%u invalid idx %u, no txdds setup\n",
@@ -7857,11 +7915,33 @@ static void ibsd_wr_allchans(struct qib_pportdata *ppd, int addr, unsigned data,
 	}
 }
 
+static void serdes_7322_los_enable(struct qib_pportdata *ppd, int enable)
+{
+	u64 data = qib_read_kreg_port(ppd, krp_serdesctrl);
+	qib_cdbg(LINKVERB, "Turning LOS %s for port %d\n",
+		 (enable ? "on" : "off"), ppd->port);
+	if (enable)
+		data |= SYM_MASK(IBSerdesCtrl_0, RXLOSEN);
+	else
+		data &= ~SYM_MASK(IBSerdesCtrl_0, RXLOSEN);
+	qib_write_kreg_port(ppd, krp_serdesctrl, data);
+}
+
 static int serdes_7322_init(struct qib_pportdata *ppd)
 {
-	u64 data;
-	u32 le_val;
+	int ret = 0;
+	if (ppd->dd->cspec->r1)
+		ret = serdes_7322_init_old(ppd);
+	else
+		ret = serdes_7322_init_new(ppd);
+	return ret;
+}
 
+static int serdes_7322_init_old(struct qib_pportdata *ppd)
+{
+	u32 le_val;
+	u64 data;
+	
 	/*
 	 * Initialize the Tx DDS tables.  Also done every QSFP event,
 	 * for adapters with QSFP
@@ -7920,8 +8000,8 @@ static int serdes_7322_init(struct qib_pportdata *ppd)
 	data = qib_read_kreg_port(ppd, krp_serdesctrl);
 	/* Turn off IB latency mode */
 	data &= ~SYM_MASK(IBSerdesCtrl_0, IB_LAT_MODE);
-	qib_write_kreg_port(ppd, krp_serdesctrl, data |
-		SYM_MASK(IBSerdesCtrl_0, RXLOSEN));
+	qib_write_kreg_port(ppd, krp_serdesctrl, data);
+	serdes_7322_los_enable(ppd, 1);
 
 	/* rxbistena; set 0 to avoid effects of it switch later */
 	ibsd_wr_allchans(ppd, 9, 0 << 15, 1 << 15);
@@ -7957,6 +8037,205 @@ static int serdes_7322_init(struct qib_pportdata *ppd)
 
 	/* Set the frequency loop bandwidth to 15 */
 	ibsd_wr_allchans(ppd, 2, 15 << 5, BMASK(8, 5));
+
+	return 0;
+}
+
+static int serdes_7322_init_new(struct qib_pportdata *ppd)
+{
+	u64 tstart;
+	u32 le_val, rxcaldone;
+	int chan, chan_done = (1 << SERDES_CHANS) - 1;
+
+	/*
+	 * Initialize the Tx DDS tables.  Also done every QSFP event,
+	 * for adapters with QSFP
+	 */
+	init_txdds_table(ppd, 0);
+
+	/* Clear cmode-override, may be set from older driver */
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 10, 0 << 14, 1 << 14);
+
+	/* ensure no tx overrides from earlier driver loads */
+	qib_write_kreg_port(ppd, krp_tx_deemph_override,
+		SYM_MASK(IBSD_TX_DEEMPHASIS_OVERRIDE_0,
+		reset_tx_deemphasis_override));
+
+	/* START OF LSI SUGGESTED SERDES BRINGUP */
+	/* Reset - Calibration Setup */
+	/*       Stop DFE adaptaion */
+	ibsd_wr_allchans(ppd, 1, 0, BMASK(9, 1));
+	/*       Disable LE1 */
+	ibsd_wr_allchans(ppd, 13, 0, BMASK(5, 5));
+	/*       Disable autoadapt for LE1 */
+	ibsd_wr_allchans(ppd, 1, 0, BMASK(15, 15));
+	/*       Disable LE2 */
+	ibsd_wr_allchans(ppd, 13, 0, BMASK(6, 6));
+	/*       Disable VGA */
+	ibsd_wr_allchans(ppd, 5, 0, BMASK(0, 0));
+	/*       Disable AFE Offset Cancel */
+	ibsd_wr_allchans(ppd, 12, 0, BMASK(12, 12));
+	/*       Disable Timing Loop */
+	ibsd_wr_allchans(ppd, 2, 0, BMASK(3, 3));
+	/*       Disable Frequency Loop */
+	ibsd_wr_allchans(ppd, 2, 0, BMASK(4, 4));
+	/*       Disable Baseline Wander Correction */
+	ibsd_wr_allchans(ppd, 13, 0, BMASK(13, 13));
+	/*       Disable RX Calibration */
+	ibsd_wr_allchans(ppd, 4, 0, BMASK(10, 10));
+	/*       Disable RX Offset Calibration */
+	ibsd_wr_allchans(ppd, 12, 0, BMASK(4, 4));
+	/*       Select BB CDR */
+	ibsd_wr_allchans(ppd, 2, (1 << 15), BMASK(15, 15));
+	/*       CDR Step Size */
+	ibsd_wr_allchans(ppd, 5, 0, BMASK(9, 8));
+	/*       Enable phase Calibration */
+	ibsd_wr_allchans(ppd, 12, (1 << 5), BMASK(5, 5));
+	/*       DFE Bandwidth [2:14-12] */
+	ibsd_wr_allchans(ppd, 2, (4 << 12), BMASK(14, 12));
+	/*       DFE Config (4 taps only) */
+	ibsd_wr_allchans(ppd, 16, 0, BMASK(1, 0));
+	/*       Gain Loop Bandwidth */
+	if (!ppd->dd->cspec->r1) {
+		ibsd_wr_allchans(ppd, 12, 1 << 12, BMASK(12, 12));
+		ibsd_wr_allchans(ppd, 12, 2 << 8, BMASK(11, 8));
+	} else {
+		ibsd_wr_allchans(ppd, 19, (3 << 11), BMASK(13, 11));
+	}
+	/*       Baseline Wander Correction Gain [13:4-0] (leave as default) */
+	/*       Baseline Wander Correction Gain [3:7-5] (leave as default) */
+	/*       Data Rate Select [5:7-6] (leave as default) */
+	/*       RX Parralel Word Width [3:10-8] (leave as default) */
+
+	/* RX REST */
+	/*       Single- or Multi-channel reset */
+	/*       RX Analog reset */
+	/*       RX Digital reset */
+	ibsd_wr_allchans(ppd, 0, 0, BMASK(15, 13));
+	msleep(1);
+	/*       RX Analog reset */
+	ibsd_wr_allchans(ppd, 0, (1 << 14), BMASK(14, 14));
+	msleep(1);
+	/*       RX Digital reset */
+	ibsd_wr_allchans(ppd, 0, (1 << 13), BMASK(13, 13));
+	msleep(1);
+
+	/* setup LoS params; these are subsystem, so chan == 5 */
+	/* LoS filter threshold_count on, ch 0-3, set to 8 */
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 5, 8 << 11, BMASK(14, 11));
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 7, 8 << 4, BMASK(7, 4));
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 8, 8 << 11, BMASK(14, 11));
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 10, 8 << 4, BMASK(7, 4));
+
+	/* LoS filter threshold_count off, ch 0-3, set to 4 */
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 6, 4 << 0, BMASK(3, 0));
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 7, 4 << 8, BMASK(11, 8));
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 9, 4 << 0, BMASK(3, 0));
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 10, 4 << 8, BMASK(11, 8));
+
+	/* LoS filter select enabled */
+	ahb_mod(ppd->dd, IBSD(ppd->hw_pidx), 5, 9, 1 << 15, 1 << 15);
+
+	/* LoS target data:  SDR=4, DDR=2, QDR=1 */
+	ibsd_wr_allchans(ppd, 14, (1 << 3), BMASK(5, 3)); /* QDR */
+	ibsd_wr_allchans(ppd, 20, (2 << 10), BMASK(12, 10)); /* DDR */
+	ibsd_wr_allchans(ppd, 20, (4 << 13), BMASK(15, 13)); /* SDR */
+
+	/* Turn on LOS on initial SERDES init */
+	serdes_7322_los_enable(ppd, 1);
+	/* FLoop LOS gate: PPM filter  enabled */
+	ibsd_wr_allchans(ppd, 38, 0 << 10, 1 << 10);
+
+	/* RX LATCH CALIBRATION */
+	/*       Enable Eyefinder Phase Calibration latch */
+	ibsd_wr_allchans(ppd, 15, 1, BMASK(0, 0));
+	/*       Enable RX Offset Calibration latch */
+	ibsd_wr_allchans(ppd, 12, (1 << 4), BMASK(4, 4));
+	msleep(1);
+	/*       Start Calibration */
+	ibsd_wr_allchans(ppd, 4, (1 << 10), BMASK(10, 10));
+	tstart = get_jiffies_64();
+	while (chan_done &&
+	       !time_after64(tstart, tstart + msecs_to_jiffies(500))) {
+		msleep(1);
+		for (chan = 0; chan < SERDES_CHANS; ++chan) {
+			rxcaldone = ahb_mod(ppd->dd, IBSD(ppd->hw_pidx),
+					    (chan + (chan >> 1)),
+					    25, 0, 0);
+			if ((~rxcaldone & (u32)BMASK(9, 9)) == 0 &&
+			    (~chan_done & (1 << chan)) == 0)
+				chan_done &= ~(1 << chan);
+		}
+	}
+	if (chan_done) {
+		qib_cdbg(LINKVERB,
+			 "Serdes %d calibration not done after .5 sec: 0x%x\n",
+			 IBSD(ppd->hw_pidx), chan_done);
+	} else {
+		for (chan = 0; chan < SERDES_CHANS; ++chan) {
+			rxcaldone = ahb_mod(ppd->dd, IBSD(ppd->hw_pidx),
+					    (chan + (chan >> 1)),
+					    25, 0, 0);
+			if ((~rxcaldone & (u32)BMASK(10, 10)) == 0)
+				qib_cdbg(LINKVERB,
+					 "Serdes %d chan %d calibration "
+					 "failed\n", IBSD(ppd->hw_pidx), chan);
+		}
+	}
+
+	/*       Turn off Calibration */
+	ibsd_wr_allchans(ppd, 4, 0, BMASK(10, 10));
+	msleep(1);
+
+	/* BRING RX UP */
+	/*       Set LE2 value (May be overridden in qsfp_7322_event) */
+	le_val = IS_QME(ppd->dd) ? LE2_QME : LE2_DEFAULT;
+	ibsd_wr_allchans(ppd, 13, (le_val << 7), BMASK(9, 7));
+	/*       Set LE2 Loop bandwidth */
+	ibsd_wr_allchans(ppd, 3, (7 << 5), BMASK(7, 5));
+	/*       Enable LE2 */
+	ibsd_wr_allchans(ppd, 13, (1 << 6), BMASK(6, 6));
+	msleep(20);
+	/*       Enable H0 only */
+	ibsd_wr_allchans(ppd, 1, 1, BMASK(9, 1));
+	/* gain hi stop 32 (22) (6:1) lo stop 7 (10:7) target 22 (13) (15:11) */
+	le_val = (ppd->dd->cspec->r1 || IS_QME(ppd->dd)) ? 0xb6c0 : 0x6bac;
+	ibsd_wr_allchans(ppd, 21, le_val, 0xfffe);
+	/*       Enable VGA */
+	ibsd_wr_allchans(ppd, 5, 0, BMASK(0, 0));
+	msleep(20);
+	/*       Set Frequency Loop Bandwidth */
+	ibsd_wr_allchans(ppd, 2, (7 << 5), BMASK(8, 5));
+	/*       Enable Frequency Loop */
+	ibsd_wr_allchans(ppd, 2, (1 << 4), BMASK(4, 4));
+	/*       Set Timing Loop Bandwidth */
+	ibsd_wr_allchans(ppd, 2, 0, BMASK(11, 9));
+	/*       Enable Timing Loop */
+	ibsd_wr_allchans(ppd, 2, (1 << 3), BMASK(3, 3));
+	msleep(50);
+	/*       Enable DFE
+	 *       Set receive adaptation mode.  SDR and DDR adaptation are
+	 *       always on, and QDR is initially enabled; later disabled.
+	 */
+	qib_write_kreg_port(ppd, krp_static_adapt_dis(0), 0ULL);
+	qib_write_kreg_port(ppd, krp_static_adapt_dis(1), 0ULL);
+	qib_write_kreg_port(ppd, krp_static_adapt_dis(2),
+			    ppd->dd->cspec->r1 ?
+			    QDR_STATIC_ADAPT_DOWN_R1 : QDR_STATIC_ADAPT_DOWN);
+	ppd->cpspec->qdr_dfe_on = 1;
+	/*       Disable LE1  */
+	ibsd_wr_allchans(ppd, 13, (0 << 5), (1 << 5));
+	/*       Disable auto adapt for LE1 */
+	ibsd_wr_allchans(ppd, 1, (0 << 15), BMASK(15, 15));
+	msleep(10);
+	/*       Enable AFE Offset Cancel */
+	ibsd_wr_allchans(ppd, 12, (1 << 12), BMASK(12, 12));
+	/*       Enable Baseline Wander Correction */
+	ibsd_wr_allchans(ppd, 12, (1 << 13), BMASK(13, 13));
+	/* Termination: rxtermctrl_r2d addr 11 bits [12:11] = 1 */
+	ibsd_wr_allchans(ppd, 11, (1 << 11), BMASK(12, 11));
+	/* VGA output common mode */
+	ibsd_wr_allchans(ppd, 12, (3 << 2), BMASK(3, 2));
 
 	return 0;
 }

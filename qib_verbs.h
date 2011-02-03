@@ -301,6 +301,7 @@ struct qib_mregion {
 	int access_flags;
 	u32 max_segs;           /* number of qib_segs in all the arrays */
 	u32 mapsz;              /* size of the map array */
+	u8  page_shift;         /* zero -> non unform/non powerof2  sizes, non-zero -> uniform powerof2 size */
 	atomic_t refcount;
 	struct qib_segarray *map[0];    /* the segments */
 };
@@ -740,7 +741,6 @@ struct qib_ibdev {
 	spinlock_t n_srqs_lock;
 	u32 n_mcast_grps_allocated; /* number of mcast groups allocated */
 	spinlock_t n_mcast_grps_lock;
-	unsigned next_ctxt; /* next ctxt to be used to allocate a qpn */
 };
 
 struct qib_verbs_counters {
