@@ -1,3 +1,10 @@
+2011-02-10 Ira Weiny <weiny2@llnl.gov>
+	* Tag 1.5.2-38_1chaos
+
+2011-02-10 Mike Marciniszyn <mike.marciniszyn@qlogic.com>
+	* Tag 1.5.2-38
+	* Kernel BUG at include/linux/timer.h:82
+
 2011-02-03 Ira Weiny <weiny2@llnl.gov>
 	* Tag 1.5.2-37_1chaos
 
