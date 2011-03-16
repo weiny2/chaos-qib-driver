@@ -1,3 +1,8 @@
+2011-03-15 Ira Weiny <weiny2@llnl.gov>
+
+	* Tag 1.5.2-41_2chaos
+	* revert "IB/qib: change rcv queue/qpn selection"
+
 2011-02-28 Mitko Haralanov <mitko@qlogic.com>
 	* Tag 1.5.2-41
 	* Set default LE2 value for active cables to 0
@@ -43,10 +48,6 @@
 2011-01-18 Mitko Haralanov <mitko@qlogic.com>
 	* Tag 1.5.2-32
 	* RDMA lkey/rkey validation is inefficient for GPFS
-
-2011-01-18 Mitko Haralanov <mitko@qlogic.com>
-	* Tag 1.5.2-31
-	* change rcv queue/qpn selection
 
 2011-01-18 Mitko Haralanov <mitko@qlogic.com>
 	* Tag 1.5.2-30
