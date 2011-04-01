@@ -44,7 +44,9 @@
 
 #include "qib.h"
 
+#ifdef __CHAOS_4__
 #include "backport_kobject.h"
+#endif
 
 #define QIB_TRACE_FILE		"ipath_trace"
 #define QIB_TRACE_MAXCACHENAME	32
@@ -247,7 +249,11 @@ struct qib_evt_file {
 
 struct evt_trace_device {
 	struct cdev *cdev;
+#ifdef __CHAOS_4__
 	struct class_device *class_dev;
+#else /* __CHAOS_5__ */
+	struct device *class_dev;
+#endif
 };
 
 static int qib_trace_set_bufsize(const char *val, struct kernel_param *kp);

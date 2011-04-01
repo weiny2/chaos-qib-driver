@@ -47,20 +47,31 @@
 #include "qib.h"
 #include "qib_common.h"
 #include "qib_user_sdma.h"
+#ifdef __CHAOS_4__
 #include "qib_wc_pat.h"
+#endif
 
 static int qib_open(struct inode *, struct file *);
 static int qib_close(struct inode *, struct file *);
 static ssize_t qib_write(struct file *, const char __user *, size_t, loff_t *);
+#ifdef __CHAOS_4__
 static ssize_t qib_writev(struct file *, const struct iovec *,
 			  unsigned long , loff_t *);
+#else /* __CHAOS_5__ */
+static ssize_t qib_aio_write(struct kiocb *iocb, const struct iovec *iov,
+			     unsigned long dim, loff_t off);
+#endif
 static unsigned int qib_poll(struct file *, struct poll_table_struct *);
 static int qib_mmapf(struct file *, struct vm_area_struct *);
 
 static const struct file_operations qib_file_ops = {
 	.owner = THIS_MODULE,
 	.write = qib_write,
+#ifdef __CHAOS_4__
 	.writev = qib_writev,
+#else /* __CHAOS_5__ */
+	.aio_write = qib_aio_write,
+#endif
 	.open = qib_open,
 	.release = qib_close,
 	.poll = qib_poll,
@@ -967,6 +978,7 @@ bail:
 	return ret;
 }
 
+#ifdef __CHAOS_4__
 /*
  * qib_file_vma_nopage - handle a VMA page fault.
  */
@@ -996,6 +1008,28 @@ out:
 static struct vm_operations_struct qib_file_vm_ops = {
 	.nopage = qib_file_vma_nopage,
 };
+#else /* __CHAOS_5__ */
+/*
+ * qib_file_vma_fault - handle a VMA page fault.
+ */
+static int qib_file_vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	struct page *page;
+
+	page = vmalloc_to_page((void *)(vmf->pgoff << PAGE_SHIFT));
+	if (!page)
+		return VM_FAULT_SIGBUS;
+
+	get_page(page);
+	vmf->page = page;
+
+	return 0;
+}
+
+static struct vm_operations_struct qib_file_vm_ops = {
+	.fault = qib_file_vma_fault,
+};
+#endif
 
 static int mmap_kvaddr(struct vm_area_struct *vma, u64 pgaddr,
 		       struct qib_ctxtdata *rcd, unsigned subctxt)
@@ -2365,6 +2399,7 @@ bail:
 	return ret;
 }
 
+#ifdef __CHAOS_4__
 static ssize_t qib_writev(struct file *filp, const struct iovec *iov,
 			  unsigned long dim, loff_t *off)
 {
@@ -2377,17 +2412,41 @@ static ssize_t qib_writev(struct file *filp, const struct iovec *iov,
 
 	return qib_user_sdma_writev(rcd, pq, iov, dim);
 }
+#else /* __CHAOS_5__ */
+static ssize_t qib_aio_write(struct kiocb *iocb, const struct iovec *iov,
+			     unsigned long dim, loff_t off)
+{
+	struct qib_filedata *fp = iocb->ki_filp->private_data;
+	struct qib_ctxtdata *rcd = ctxt_fp(iocb->ki_filp);
+	struct qib_user_sdma_queue *pq = fp->pq;
+
+	if (!dim || !pq)
+		return -EINVAL;
+
+	return qib_user_sdma_writev(rcd, pq, iov, dim);
+}
+#endif
 
 static struct class *qib_class;
 static dev_t qib_dev;
 
+#ifdef __CHAOS_4__
 int qib_cdev_init(int minor, const char *name,
 		  const struct file_operations *fops,
 		  struct cdev **cdevp, struct class_device **class_devp)
+#else /* __CHAOS_5__ */
+int qib_cdev_init(int minor, const char *name,
+		  const struct file_operations *fops,
+		  struct cdev **cdevp, struct device **class_devp)
+#endif
 {
 	const dev_t dev = MKDEV(MAJOR(qib_dev), minor);
 	struct cdev *cdev;
+#ifdef __CHAOS_4__
 	struct class_device *class_dev = NULL;
+#else /* __CHAOS_5__ */
+	struct device *class_dev = NULL;
+#endif
 	int ret;
 
 	cdev = cdev_alloc();
@@ -2411,8 +2470,12 @@ int qib_cdev_init(int minor, const char *name,
 		goto err_cdev;
 	}
 
+#ifdef __CHAOS_4__
 	class_dev = class_device_create(qib_class, NULL, dev, NULL,
 					(char *)name);
+#else /* __CHAOS_5__ */
+	class_dev = device_create(qib_class, NULL, dev, NULL, name);
+#endif
 	if (!IS_ERR(class_dev))
 		goto done;
 	ret = PTR_ERR(class_dev);
@@ -2429,6 +2492,7 @@ done:
 	return ret;
 }
 
+#ifdef __CHAOS_4__
 void qib_cdev_cleanup(struct cdev **cdevp, struct class_device **class_devp)
 {
 	struct class_device *class_dev = *class_devp;
@@ -2443,9 +2507,30 @@ void qib_cdev_cleanup(struct cdev **cdevp, struct class_device **class_devp)
 		*cdevp = NULL;
 	}
 }
+#else /* __CHAOS_5__ */
+void qib_cdev_cleanup(struct cdev **cdevp, struct device **devp)
+{
+	struct device *device = *devp;
+
+	if (device) {
+		device_unregister(device);
+		*devp = NULL;
+	}
+
+	if (*cdevp) {
+		cdev_del(*cdevp);
+		*cdevp = NULL;
+	}
+}
+#endif
+
 
 static struct cdev *wildcard_cdev;
+#ifdef __CHAOS_4__
 static struct class_device *wildcard_class_dev;
+#else /* __CHAOS_5__ */
+static struct device *wildcard_class_dev;
+#endif
 
 int __init qib_dev_init(void)
 {

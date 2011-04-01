@@ -44,7 +44,9 @@
 #include "qib.h"
 #include "qib_6120_regs.h"
 
+#ifdef __CHAOS_4__
 #include "backport_kobject.h"
+#endif
 
 static void qib_6120_setup_setextled(struct qib_pportdata *, u32);
 static void sendctrl_6120_mod(struct qib_pportdata *ppd, u32 op);

@@ -35,12 +35,14 @@
 #include <linux/err.h>
 #include <linux/vmalloc.h>
 
-#include "backport_wq.h"
-
 #include "qib.h"
+
+#ifdef __CHAOS_4__
+#include "backport_wq.h"
 
 /* Undo OFED backport changes so we get the real cancel_delayed_work() */
 #undef cancel_delayed_work
+#endif
 
 #define BITS_PER_PAGE           (PAGE_SIZE*BITS_PER_BYTE)
 #define BITS_PER_PAGE_MASK      (BITS_PER_PAGE-1)
@@ -685,7 +687,11 @@ int qib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			spin_unlock(&qp->s_lock);
 			spin_unlock_irq(&qp->r_lock);
 			/* Stop the sending work queue and retry timer */
+#ifdef __CHAOS_4__
 			cancel_delayed_work(&qp->s_work);
+#else /* __CHAOS_5__ */
+			cancel_work_sync(&qp->s_work);
+#endif
 			flush_workqueue(qib_wq);
 			del_timer_sync(&qp->s_timer);
 			wait_event(qp->wait_dma, !atomic_read(&qp->s_dma_busy));
@@ -1169,7 +1175,11 @@ int qib_destroy_qp(struct ib_qp *ibqp)
 		spin_unlock(&dev->pending_lock);
 		qp->s_flags &= ~(QIB_S_TIMER | QIB_S_ANY_WAIT);
 		spin_unlock_irq(&qp->s_lock);
+#ifdef __CHAOS_4__
 		cancel_delayed_work(&qp->s_work);
+#else /* __CHAOS_5__ */
+		cancel_work_sync(&qp->s_work);
+#endif
 		flush_workqueue(qib_wq);
 		del_timer_sync(&qp->s_timer);
 		wait_event(qp->wait_dma, !atomic_read(&qp->s_dma_busy));

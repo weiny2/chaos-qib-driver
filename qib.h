@@ -51,6 +51,9 @@
 #include <linux/kref.h>
 #include <linux/sched.h>
 
+#undef __CHAOS_4__
+#define __CHAOS_5__ 1
+
 #include "qib_common.h"
 #include "qib_debug.h"
 #include "qib_verbs.h"
@@ -662,8 +665,14 @@ struct qib_devdata {
 	struct pci_dev *pcidev;
 	struct cdev *user_cdev;
 	struct cdev *diag_cdev;
+
+#ifdef __CHAOS_4__
 	struct class_device *user_class_dev;
 	struct class_device *diag_class_dev;
+#else /* __CHAOS_5__ */
+	struct device *user_class_dev;
+	struct device *diag_class_dev;
+#endif
 
 	/* mem-mapped pointer to base of chip regs */
 	u64 __iomem *kregbase;
@@ -1055,10 +1064,17 @@ void qib_disable_wc(struct qib_devdata *dd);
 int qib_count_units(int *npresentp, int *nupp);
 int qib_count_active_units(void);
 
+#ifdef __CHAOS_4__
 int qib_cdev_init(int minor, const char *name,
 		  const struct file_operations *fops,
 		  struct cdev **cdevp, struct class_device **class_devp);
 void qib_cdev_cleanup(struct cdev **cdevp, struct class_device **class_devp);
+#else /* __CHAOS_5__ */
+int qib_cdev_init(int minor, const char *name,
+		  const struct file_operations *fops,
+		  struct cdev **cdevp, struct device **class_devp);
+void qib_cdev_cleanup(struct cdev **cdevp, struct device **class_devp);
+#endif
 int qib_dev_init(void);
 void qib_dev_cleanup(void);
 

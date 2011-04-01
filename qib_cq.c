@@ -36,7 +36,9 @@
 
 #include "qib_verbs.h"
 
+#ifdef __CHAOS_4__
 #include "backport_wq.h"
+#endif
 
 /**
  * qib_cq_enter - add a new entry to the completion queue

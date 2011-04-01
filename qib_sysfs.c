@@ -34,7 +34,9 @@
 
 #include "qib.h"
 
+#ifdef __CHAOS_4__
 #include "backport_kobject.h"
+#endif
 
 /**
  * qib_parse_ushort - parse an unsigned short value in an arbitrary base
@@ -449,18 +451,34 @@ static struct kobj_type qib_diagc_ktype = {
  * Start of per-unit (or driver, in some cases, but replicated
  * per unit) functions (these get a class_device *)
  */
+#ifdef __CHAOS_4__
 static ssize_t show_rev(struct class_device *cdev, char *buf)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t show_rev(struct device *cdev, struct device_attribute *attr,
+			char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 
 	return sprintf(buf, "%x\n", dd_from_dev(dev)->minrev);
 }
 
+#ifdef __CHAOS_4__
 static ssize_t show_hca(struct class_device *cdev, char *buf)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t show_hca(struct device *cdev, struct device_attribute *attr,
+			char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 	struct qib_devdata *dd = dd_from_dev(dev);
 	int ret;
 
@@ -475,10 +493,18 @@ static const char *qp_type_str[] = {
 	"SMI", "GSI", "RC", "UC", "UD",
 };
 
+#ifdef __CHAOS_4__
 static ssize_t show_stats(struct class_device *cdev, char *buf)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t show_stats(struct device *cdev,
+			  struct device_attribute *attr, char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 	struct qib_devdata *dd = dd_from_dev(dev);
 	unsigned pidx;
 	unsigned i;
@@ -575,16 +601,29 @@ static ssize_t show_stats(struct class_device *cdev, char *buf)
 	return len;
 }
 
+#ifdef __CHAOS_4__
 static ssize_t show_version(struct class_device *cdev, char *buf)
+#else /* __CHAOS_5__ */
+static ssize_t show_version(struct device *cdev,
+			    struct device_attribute *attr, char *buf)
+#endif
 {
 	/* The string printed here is already newline-terminated. */
 	return scnprintf(buf, PAGE_SIZE, "%s", (char *)ib_qib_version);
 }
 
+#ifdef __CHAOS_4__
 static ssize_t show_boardversion(struct class_device *cdev, char *buf)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t show_boardversion(struct device *cdev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 	struct qib_devdata *dd = dd_from_dev(dev);
 
 	/* The string printed here is already newline-terminated. */
@@ -592,10 +631,18 @@ static ssize_t show_boardversion(struct class_device *cdev, char *buf)
 }
 
 
+#ifdef __CHAOS_4__
 static ssize_t show_localbus_info(struct class_device *cdev, char *buf)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t show_localbus_info(struct device *cdev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 	struct qib_devdata *dd = dd_from_dev(dev);
 
 	/* The string printed here is already newline-terminated. */
@@ -603,10 +650,18 @@ static ssize_t show_localbus_info(struct class_device *cdev, char *buf)
 }
 
 
+#ifdef __CHAOS_4__
 static ssize_t show_nctxts(struct class_device *cdev, char *buf)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t show_nctxts(struct device *cdev,
+			   struct device_attribute *attr, char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 	struct qib_devdata *dd = dd_from_dev(dev);
 
 	/* Return the number of user ports (contexts) available. */
@@ -614,10 +669,18 @@ static ssize_t show_nctxts(struct class_device *cdev, char *buf)
 		dd->first_user_ctxt);
 }
 
+#ifdef __CHAOS_4__
 static ssize_t show_serial(struct class_device *cdev, char *buf)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t show_serial(struct device *cdev,
+			   struct device_attribute *attr, char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 	struct qib_devdata *dd = dd_from_dev(dev);
 
 	buf[sizeof dd->serial] = '\0';
@@ -626,11 +689,20 @@ static ssize_t show_serial(struct class_device *cdev, char *buf)
 	return strlen(buf);
 }
 
+#ifdef __CHAOS_4__
 static ssize_t store_chip_reset(struct class_device *cdev, const char *buf,
 				size_t count)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t store_chip_reset(struct device *cdev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 	struct qib_devdata *dd = dd_from_dev(dev);
 	int ret;
 
@@ -644,10 +716,18 @@ bail:
 	return ret < 0 ? ret : count;
 }
 
+#ifdef __CHAOS_4__
 static ssize_t show_logged_errs(struct class_device *cdev, char *buf)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t show_logged_errs(struct device *cdev,
+				struct device_attribute *attr, char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 	struct qib_devdata *dd = dd_from_dev(dev);
 	int idx, count;
 
@@ -668,10 +748,18 @@ static ssize_t show_logged_errs(struct class_device *cdev, char *buf)
 /*
  * Dump tempsense regs. in decimal, to ease shell-scripts.
  */
+#ifdef __CHAOS_4__
 static ssize_t show_tempsense(struct class_device *cdev, char *buf)
 {
 	struct qib_ibdev *dev =
 		container_of(cdev, struct qib_ibdev, ibdev.class_dev);
+#else /* __CHAOS_5__ */
+static ssize_t show_tempsense(struct device *cdev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(cdev, struct qib_ibdev, ibdev.dev);
+#endif
 	struct qib_devdata *dd = dd_from_dev(dev);
 	int ret;
 	int idx;
@@ -702,6 +790,8 @@ static ssize_t show_tempsense(struct class_device *cdev, char *buf)
  */
 
 /* start of per-unit file structures and support code */
+#ifdef __CHAOS_4__
+
 static CLASS_DEVICE_ATTR(hw_rev, S_IRUGO, show_rev, NULL);
 static CLASS_DEVICE_ATTR(hca_type, S_IRUGO, show_hca, NULL);
 static CLASS_DEVICE_ATTR(board_id, S_IRUGO, show_hca, NULL);
@@ -729,6 +819,38 @@ static struct class_device_attribute *qib_class_attributes[] = {
 	&class_device_attr_localbus_info,
 	&class_device_attr_chip_reset,
 };
+
+#else /* __CHAOS_5__ */
+
+static DEVICE_ATTR(hw_rev, S_IRUGO, show_rev, NULL);
+static DEVICE_ATTR(hca_type, S_IRUGO, show_hca, NULL);
+static DEVICE_ATTR(board_id, S_IRUGO, show_hca, NULL);
+static DEVICE_ATTR(stats, S_IRUGO, show_stats, NULL);
+static DEVICE_ATTR(version, S_IRUGO, show_version, NULL);
+static DEVICE_ATTR(nctxts, S_IRUGO, show_nctxts, NULL);
+static DEVICE_ATTR(serial, S_IRUGO, show_serial, NULL);
+static DEVICE_ATTR(boardversion, S_IRUGO, show_boardversion, NULL);
+static DEVICE_ATTR(logged_errors, S_IRUGO, show_logged_errs, NULL);
+static DEVICE_ATTR(tempsense, S_IRUGO, show_tempsense, NULL);
+static DEVICE_ATTR(localbus_info, S_IRUGO, show_localbus_info, NULL);
+static DEVICE_ATTR(chip_reset, S_IWUSR, NULL, store_chip_reset);
+
+static struct device_attribute *qib_attributes[] = {
+	&dev_attr_hw_rev,
+	&dev_attr_hca_type,
+	&dev_attr_board_id,
+	&dev_attr_stats,
+	&dev_attr_version,
+	&dev_attr_nctxts,
+	&dev_attr_serial,
+	&dev_attr_boardversion,
+	&dev_attr_logged_errors,
+	&dev_attr_tempsense,
+	&dev_attr_localbus_info,
+	&dev_attr_chip_reset,
+};
+
+#endif /* __CHAOS_4__ */
 
 static int create_port_files(struct ib_device *ibdev, u8 port_num,
 			     struct kobject *kobj)
@@ -792,6 +914,7 @@ bail:
 	return ret;
 }
 
+#ifdef __CHAOS_4__
 /*
  * Register and create our files in /sys/class/infiniband.
  */
@@ -811,6 +934,26 @@ int qib_verbs_register_sysfs(struct qib_devdata *dd)
 bail:
 	return ret;
 }
+#else /* __CHAOS_5__ */
+/*
+ * Register and create our files in /sys/class/infiniband.
+ */
+int qib_verbs_register_sysfs(struct qib_devdata *dd)
+{
+	struct ib_device *dev = &dd->verbs_dev.ibdev;
+	int i, ret;
+
+	for (i = 0; i < ARRAY_SIZE(qib_attributes); ++i) {
+		ret = device_create_file(&dev->dev, qib_attributes[i]);
+		if (ret)
+			goto bail;
+	}
+
+	ret = ib_sysfs_create_port_files(dev, create_port_files);
+bail:
+	return ret;
+}
+#endif /* __CHAOS_4__ */
 
 /*
  * Unregister and remove our files in /sys/class/infiniband.

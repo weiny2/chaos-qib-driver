@@ -32,7 +32,9 @@
 #include <linux/types.h>
 #include <linux/scatterlist.h>
 
+#ifdef __CHAOS_4__
 #include "backport_scatterlist.h"
+#endif
 
 #include "qib_verbs.h"
 

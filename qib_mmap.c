@@ -74,6 +74,7 @@ static void qib_vma_close(struct vm_area_struct *vma)
 	kref_put(&ip->ref, qib_release_mmap_info);
 }
 
+#ifdef __CHAOS_4__
 /*
  * qib_vma_nopage - handle a VMA page fault.
  */
@@ -103,11 +104,14 @@ static struct page *qib_vma_nopage(struct vm_area_struct *vma,
 out:
 	return page;
 }
+#endif
 
 static struct vm_operations_struct qib_vm_ops = {
 	.open =     qib_vma_open,
 	.close =    qib_vma_close,
+#ifdef __CHAOS_4__
 	.nopage =   qib_vma_nopage,
+#endif
 };
 
 /**

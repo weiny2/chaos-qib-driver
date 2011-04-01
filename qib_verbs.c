@@ -1325,7 +1325,11 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 
 	tx->txreq.addr = dma_map_single(&dd->pcidev->dev, phdr,
 					tx->hdr_dwords << 2, DMA_TO_DEVICE);
+#ifdef __CHAOS_4__
 	if (dma_mapping_error(tx->txreq.addr))
+#else /* __CHAOS_5__ */
+	if (dma_mapping_error(&dd->pcidev->dev, tx->txreq.addr))
+#endif
 		goto map_err;
 	tx->align_buf = phdr;
 	tx->txreq.flags |= QIB_SDMA_TXREQ_F_FREEBUF;
@@ -2260,7 +2264,9 @@ int qib_register_ib_device(struct qib_devdata *dd)
 	ibdev->phys_port_cnt = dd->num_pports;
 	ibdev->num_comp_vectors = 1;
 	ibdev->dma_device = &dd->pcidev->dev;
+#ifdef __CHAOS_4__
 	ibdev->class_dev.dev = ibdev->dma_device;
+#endif
 	ibdev->query_device = qib_query_device;
 	ibdev->modify_device = qib_modify_device;
 	ibdev->query_port = qib_query_port;

@@ -50,8 +50,10 @@
 #include "qib_7322_regs.h"
 #include "qib_qsfp.h"
 
+#ifdef __CHAOS_4__
 #include "backport_wq.h"
 #include "backport_kobject.h"
+#endif
 
 #include "qib_mad.h"
 

@@ -45,7 +45,9 @@
 #include "qib.h"
 #include "qib_7220.h"
 
+#ifdef __CHAOS_4__
 #include "backport_kobject.h"
+#endif
 
 static void qib_setup_7220_setextled(struct qib_pportdata *, u32);
 static void qib_7220_handle_hwerrors(struct qib_devdata *, char *, size_t);

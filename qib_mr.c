@@ -34,7 +34,9 @@
 #include <rdma/ib_umem.h>
 #include <rdma/ib_smi.h>
 
+#ifdef __CHAOS_4__
 #include "backport_scatterlist.h"
+#endif
 
 #include "qib.h"
 
