@@ -1,3 +1,8 @@
+2011-03-15 Ira Weiny <weiny2@llnl.gov>
+
+	* Tag 1.5.2-41_2chaos
+	* revert "IB/qib: change rcv queue/qpn selection"
+
 2011-02-28 Mitko Haralanov <mitko@qlogic.com>
 	* Tag 1.5.2-41
 	* Set default LE2 value for active cables to 0
@@ -10,9 +15,15 @@
 	* Tag 1.5.2-39
 	* Prevent double completions after a timeout or RNR error
 
+2011-02-10 Ira Weiny <weiny2@llnl.gov>
+	* Tag 1.5.2-38_1chaos
+
 2011-02-10 Mike Marciniszyn <mike.marciniszyn@qlogic.com>
 	* Tag 1.5.2-38
 	* Kernel BUG at include/linux/timer.h:82
+
+2011-02-03 Ira Weiny <weiny2@llnl.gov>
+	* Tag 1.5.2-37_1chaos
 
 2011-01-19 Mitko Haralanov <mitko@qlogic.com>
 	* Tag 1.5.2-37
@@ -37,10 +48,6 @@
 2011-01-18 Mitko Haralanov <mitko@qlogic.com>
 	* Tag 1.5.2-32
 	* RDMA lkey/rkey validation is inefficient for GPFS
-
-2011-01-18 Mitko Haralanov <mitko@qlogic.com>
-	* Tag 1.5.2-31
-	* change rcv queue/qpn selection
 
 2011-01-18 Mitko Haralanov <mitko@qlogic.com>
 	* Tag 1.5.2-30
@@ -89,6 +96,9 @@
 	  header queue full between the writes the chip will never generate a
 	  receive available interrupt leading to deadlock.
 
+2010-11-02 Albert Chu <chu11@llnl.gov>
+	* Tag 1.5.2-20_1chaos
+
 2010-11-01 Avneesh Pant <avneesh.pant@qlogic.com>
 	* Tag 1.5.2-19
 	* For QLE73xx adapters need to update interrupt mitigation timeout
@@ -125,12 +135,19 @@
 	* Tag 1.5.2-13
 	* [PATCH] set port physical state even if other fields are invalid
 
+2010-10-21 Ira Weiny <weiny2@llnl.gov>
+	* Tag 1.5.2-12_1chaos
+	* added patches from QLogic
+	  Simple patch to support krcvqs > 1
+	  patch from Avneesh to fix "stuck" WR/QP's
+
 2010-09-17 Mitko Haralanov <mitko@qlogic.com>
 	* Tag 1.5.2-12
 	* [PATCH] ib_qib: handle transitions from ACTIVE_DEFERRED to ACTIVE
 	  better
 
 2010-09-16 Ira Weiny <weiny2@llnl.gov>
+	* Tag 1.5.2-10_2chaos
 	* Add kernel version to depmod command in rpm to ensure proper depmod
 	  on upgrade.
 
