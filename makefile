@@ -21,5 +21,5 @@ dist: clean
 	mv /tmp/qib-$(VERSION).tgz .
 
 install:
-	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KERNVER)/updates
-	install ib_qib.ko $(RPM_BUILD_ROOT)/lib/modules/$(KERNVER)/updates
+	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KERNVER)/extra/qib
+	install ib_qib.ko $(RPM_BUILD_ROOT)/lib/modules/$(KERNVER)/extra/qib
