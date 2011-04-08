@@ -23,14 +23,20 @@ License: GPLv2 or BSD
 Group: System Environment/Base
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Url: http://openfabrics.org
-#  Base qib rpm now requires kmod-qib
-Requires: kmod-%{name} = %{version}-%{release}
 
 #  redhat-rpm-config includes the % kernel_module_package macro
 BuildRequires: redhat-rpm-config
 
 %description
 QIB provides the driver to QLogic QDR cards.
+
+# Work around for total inflexibility of kernel_module_package -f argument.
+#  we have to ensure kmod-qib.list is available now since macros
+#  are expanded on RPM parsing:
+%(/bin/echo -e "\
+%defattr(644,root,root,755)\n\
+/lib/modules/%2-%1\n\
+/etc/depmod.d/kmod-qib.conf" >%{_sourcedir}/kmod-qib.list)
 
 #  The kernel_module_package macro creates the kmod-%{name} package
 #   for the kernel module, and handles generation of kABI Requires,
@@ -47,7 +53,7 @@ QIB provides the driver to QLogic QDR cards.
 #  since we also want to include a file under depmod.d/ we have to supply
 #  a -f filelist:
 #
-%kernel_module_package -f kmod-%{name}.list
+%kernel_module_package -f %{_sourcedir}/kmod-qib.list
 
 #  Use kverrel defined by kernel_module_package to set kdir
 %define kdir %{_usrsrc}/kernels/%{kverrel}
@@ -69,11 +75,4 @@ make VERSION=%version KERNVER=%kverrel KERNDIR=%kdir RELEASE=%release DESTDIR=${
 
 %clean
 rm -rf $RPM_BUILD_ROOT
-
-%files
-%defattr(-,root,root)
-/lib/modules/*
-
-%post
-#depmod -a %{kver}
 

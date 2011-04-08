@@ -23,8 +23,6 @@ License: GPLv2 or BSD
 Group: System Environment/Base
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Url: http://openfabrics.org
-#  Base qib rpm now requires kmod-qib
-Requires: kmod-%{name} = %{version}-%{release}
 
 #  redhat-rpm-config includes the % kernel_module_package macro
 BuildRequires: redhat-rpm-config
@@ -77,11 +75,4 @@ make VERSION=%version KERNVER=%kverrel KERNDIR=%kdir RELEASE=%release DESTDIR=${
 
 %clean
 rm -rf $RPM_BUILD_ROOT
-
-%files
-%defattr(-,root,root)
-/lib/modules/*
-
-%post
-#depmod -a %{kver}
 
