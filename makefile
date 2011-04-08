@@ -7,7 +7,7 @@ default:
 	make RELEASE=$(VERSION)-$(RELEASE)$(KERNVER) -C $(KERNDIR) M=`pwd`
 
 clean:
-	make -C /usr/src/kernels/`uname -r` M=`pwd` clean
+	make -C /usr/src/kernels/`uname -r` M=`pwd` clean; \
 	rm -f *.tgz
 
 dist: clean
