@@ -1,6 +1,47 @@
+2011-08-09 Mike Marciniszyn <mike.marciniszyn@qlogic.com>
+	* Tag 1.5.3-4
+        * IB/qib: Correct byte swap issue in PMA packet processing
+        * IB/qib: defer hca error events to tasklet
+        * IB/qib: Optimize RC/UC code by IB operation
+        * IB/qib: decode path mtu optimization
+        * IB/qib: Eliminate divide/mod in converting idx to egr buf pointer
+        * IB/qib: qpn lookup optimizations
+        * IB/qib: precompute timeout jiffies to optimize latency
+        * IB/qib: memcpy optimizations
+        * IB/qib: remove s_lock around header validation
+        * IB/qib: Adjust to use cpumask_weight() and cpumask_first()
+        * IB/qib: Add irq name refinements
+        * IB/qib: Add logic for affinity hint
+        * IB/qib: add optional numa affinity
+        * IB/qib: Optimize locking for get_txreq()
+        * IB/qib: add module paramater for sdma_idle_cnt
+        * IB/qib: add cache line awareness to qib_qp and qib_devdata structures
+        * IB/qib: Improve MPI message rates on NUMA platforms
+        * IB/qib: Optimize driver configuration for best MPI message rates, bandwidth
+        * IB/qib: Prevent driver hang with unprogrammed boards
+        * IB/qib: Ensure that LOS and DFE are being turned off
+        * IB/qib: Update active link width
+        * IB/qib: Fix potential deadlock with link down interrupt
+        * IB/qib: Indicate the number of free user contexts
+
+2011-06-29 Mike Marciniszyn <mike.marciniszyn@qlogic.com>
+	* Tag 1.5.3-3
+        * IB/qib: Fix M_Key field in SubnGet and SubnGetResp MADs
+        * IB/qib: Code style issues found during kernel.org submission testing
+        * IB/qib: Add return value testing for work queue creation
+        * IB/qib: Allow driver to load if PCIe advanced error reporting fails
+        * IB/qib: clean up properly if pci_set_consistent_dma_mask() fails
+        * Revert "IB/qib: turn off IB latency mode"
+        * IB/qib: remove A0 switch support
+
+2011-06-08 Ira Weiny <weiny2@llnl.gov>
+	* Tag 1.5.3-2
+	* spec file changes
+
 2011-06-08 Mike Marciniszyn <mike.marciniszyn@qlogic.com>
 	* Tag 1.5.3-1
 	* Add port patches for RHEL6 in master branch
+
 2011-02-28 Mitko Haralanov <mitko@qlogic.com>
 	* Tag 1.5.2-41
 	* Set default LE2 value for active cables to 0

@@ -39,11 +39,12 @@
 //#include <linux/rculist.h>
 #include "rculist.h"
 #include <linux/mm.h>
+#include <linux/random.h>
 
 #include "qib.h"
 #include "qib_common.h"
 
-static unsigned int ib_qib_qp_table_size = 251;
+static unsigned int ib_qib_qp_table_size = 256;
 module_param_named(qp_table_size, ib_qib_qp_table_size, uint, S_IRUGO);
 MODULE_PARM_DESC(qp_table_size, "QP table size");
 
@@ -159,12 +160,20 @@ const enum ib_wc_opcode ib_qib_wc_opcode[] = {
 __be64 ib_qib_sys_image_guid;
 
 /**
+ * qib_copy_sge_init - setup for fast sge copy
+ */
+void __attribute__((weak)) qib_copy_sge_init(void)
+{
+}
+
+/**
  * qib_copy_sge - copy data to SGE memory
  * @ss: the SGE state
  * @data: the data to copy
  * @length: the length of the data
  */
-void qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length, int release)
+void __attribute__((weak))
+qib_copy_sge(struct qib_sge_state *ss, void *data, u32 length, int release)
 {
 	struct qib_sge *sge = &ss->sge;
 
@@ -304,7 +313,7 @@ static void qib_copy_from_sge(void *data, struct qib_sge_state *ss, u32 length)
 		if (len > sge->sge_length)
 			len = sge->sge_length;
 		BUG_ON(len == 0);
-		memcpy(data, sge->vaddr, len);
+		memcpy_string_op(data, sge->vaddr, len);
 		sge->vaddr += len;
 		sge->length -= len;
 		sge->sge_length -= len;
@@ -812,17 +821,25 @@ void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
 		if (atomic_dec_return(&mcast->refcount) <= 1)
 			wake_up(&mcast->wait);
 	} else {
-		qp = qib_lookup_qpn(ibp, qp_num);
-		if (!qp)
-			goto drop;
+		if (rcd->lookaside_qp) {
+			if (rcd->lookaside_qpn != qp_num) {
+				if (atomic_dec_and_test(
+					&rcd->lookaside_qp->refcount))
+					wake_up(
+					 &rcd->lookaside_qp->wait);
+					rcd->lookaside_qp = NULL;
+				}
+		}
+		if (!rcd->lookaside_qp) {
+			qp = qib_lookup_qpn(ibp, qp_num);
+			if (!qp)
+				goto drop;
+			rcd->lookaside_qp = qp;
+			rcd->lookaside_qpn = qp_num;
+		} else
+			qp = rcd->lookaside_qp;
 		ibp->n_unicast_rcv++;
 		qib_qp_rcv(rcd, hdr, lnh == QIB_LRH_GRH, data, tlen, qp);
-		/*
-		 * Notify qib_destroy_qp() if it is waiting
-		 * for us to finish.
-		 */
-		if (atomic_dec_and_test(&qp->refcount))
-			wake_up(&qp->wait);
 	}
 	return;
 
@@ -1060,21 +1077,23 @@ static void copy_io(u32 __iomem *piobuf, struct qib_sge_state *ss,
 		__raw_writel(last, piobuf);
 }
 
-static struct qib_verbs_txreq *get_txreq(struct qib_ibdev *dev,
-					 struct qib_qp *qp, int *retp)
+static noinline struct qib_verbs_txreq *__get_txreq(struct qib_ibdev *dev,
+					   struct qib_qp *qp, int *retp)
 {
-	struct qib_verbs_txreq *tx;
+	struct qib_verbs_txreq *tx = NULL;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	spin_lock(&dev->pending_lock);
 
-	if (!list_empty(&dev->txreq_free)) {
+	if (unlikely(!list_empty(&dev->txreq_free))) {
 		struct list_head *l = dev->txreq_free.next;
 
 		list_del(l);
-		tx = list_entry(l, struct qib_verbs_txreq, txreq.list);
+		spin_unlock(&dev->pending_lock);
+		spin_unlock_irqrestore(&qp->s_lock, flags);
 		*retp = 0;
+		tx = list_entry(l, struct qib_verbs_txreq, txreq.list);
 	} else {
 		if (ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK &&
 		    list_empty(&qp->iowait)) {
@@ -1082,14 +1101,34 @@ static struct qib_verbs_txreq *get_txreq(struct qib_ibdev *dev,
 			qp->s_flags |= QIB_S_WAIT_TX;
 			list_add_tail(&qp->iowait, &dev->txwait);
 		}
-		tx = NULL;
 		qp->s_flags &= ~QIB_S_BUSY;
+		spin_unlock(&dev->pending_lock);
+		spin_unlock_irqrestore(&qp->s_lock, flags);
 		*retp = -EBUSY;
 	}
+	return tx;
+}
 
-	spin_unlock(&dev->pending_lock);
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+static struct qib_verbs_txreq *get_txreq(struct qib_ibdev *dev,
+					 struct qib_qp *qp, int *retp)
+{
+	struct qib_verbs_txreq *tx;
+	unsigned long flags;
 
+	spin_lock_irqsave(&dev->pending_lock, flags);
+	/* assume the list non empty */
+	if (!list_empty(&dev->txreq_free)) {
+		struct list_head *l = dev->txreq_free.next;
+
+		list_del(l);
+		spin_unlock_irqrestore(&dev->pending_lock, flags);
+		tx = list_entry(l, struct qib_verbs_txreq, txreq.list);
+		*retp = 0;
+	} else {
+		/* call slow path to get the extra lock */
+		spin_unlock_irqrestore(&dev->pending_lock, flags);
+		tx =  __get_txreq(dev, qp, retp);
+	}
 	return tx;
 }
 
@@ -1303,7 +1342,7 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		phdr = &dev->pio_hdrs[tx->hdr_inx];
 		phdr->pbc[0] = cpu_to_le32(plen);
 		phdr->pbc[1] = cpu_to_le32(control);
-		memcpy(&phdr->hdr, hdr, hdrwords << 2);
+		memcpy_string_op(&phdr->hdr, hdr, hdrwords << 2);
 		tx->txreq.flags |= QIB_SDMA_TXREQ_F_FREEDESC;
 		tx->txreq.sg_count = ndesc;
 		tx->txreq.addr = dev->pio_hdrs_phys +
@@ -1320,7 +1359,7 @@ static int qib_verbs_send_dma(struct qib_qp *qp, struct qib_ib_header *hdr,
 		goto err_tx;
 	phdr->pbc[0] = cpu_to_le32(plen);
 	phdr->pbc[1] = cpu_to_le32(control);
-	memcpy(&phdr->hdr, hdr, hdrwords << 2);
+	memcpy_string_op(&phdr->hdr, hdr, hdrwords << 2);
 	qib_copy_from_sge((u32 *) &phdr->hdr + hdrwords, ss, len);
 
 	tx->txreq.addr = dma_map_single(&dd->pcidev->dev, phdr,
@@ -2125,6 +2164,8 @@ static void init_ibport(struct qib_pportdata *ppd)
 	ibp->z_excessive_buffer_overrun_errors =
 		cntrs.excessive_buffer_overrun_errors;
 	ibp->z_vl15_dropped = cntrs.vl15_dropped;
+	ibp->qp0 = NULL;
+	ibp->qp1 = NULL;
 }
 
 /**
@@ -2141,6 +2182,7 @@ int qib_register_ib_device(struct qib_devdata *dd)
 	int ret;
 
 	dev->qp_table_size = ib_qib_qp_table_size;
+	get_random_bytes(&dev->qp_rnd, sizeof(dev->qp_rnd));
 	dev->qp_table = kzalloc(dev->qp_table_size * sizeof *dev->qp_table,
 				GFP_KERNEL);
 	if (!dev->qp_table) {

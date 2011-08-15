@@ -465,8 +465,9 @@ static int subn_get_portinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	memset(smp->data, 0, sizeof(smp->data));
 
 	/* Only return the mkey if the protection field allows it. */
-	if (smp->method == IB_MGMT_METHOD_SET || ibp->mkey == smp->mkey ||
-	    ibp->mkeyprot == 0)
+	if (!(smp->method == IB_MGMT_METHOD_GET &&
+	      ibp->mkey != smp->mkey &&
+	      ibp->mkeyprot == 1))
 		pip->mkey = ibp->mkey;
 	pip->gid_prefix = ibp->gid_prefix;
 	lid = ppd->lid;
@@ -1756,7 +1757,8 @@ static int pma_set_portcounters_cong(struct ib_perf *pmp,
 	ret = pma_get_portcounters_cong(pmp, ibdev, port);
 
 	if (counter_select & IB_PMA_SEL_CONG_XMIT) {
-		if (p_out->port_xmit_wait > p_in->port_xmit_wait) {
+		if (be64_to_cpu(p_out->port_xmit_wait) >
+			be64_to_cpu(p_in->port_xmit_wait)) {
 			spin_lock_irqsave(&ppd->ibport_data.lock, flags);
 			ppd->cong_stats.counter = 0;
 			dd->f_set_cntr_sample(ppd, QIB_CONG_TIMER_PSINTERVAL,
@@ -1765,17 +1767,22 @@ static int pma_set_portcounters_cong(struct ib_perf *pmp,
 		}
 	}
 	if (counter_select & IB_PMA_SEL_CONG_PORT_DATA) {
-		if (p_out->port_xmit_data > p_in->port_xmit_data)
+		if (be64_to_cpu(p_out->port_xmit_data) >
+			be64_to_cpu(p_in->port_xmit_data))
 			ibp->z_port_xmit_data = cntrs.port_xmit_data;
-		if (p_out->port_rcv_data > p_in->port_rcv_data)
+		if (be64_to_cpu(p_out->port_rcv_data) >
+			be64_to_cpu(p_in->port_rcv_data))
 			ibp->z_port_rcv_data = cntrs.port_rcv_data;
-		if (p_out->port_xmit_packets > p_in->port_xmit_packets)
+		if (be64_to_cpu(p_out->port_xmit_packets) >
+			be64_to_cpu(p_in->port_xmit_packets))
 			ibp->z_port_xmit_packets = cntrs.port_xmit_packets;
-		if (p_out->port_rcv_packets > p_in->port_rcv_packets)
+		if (be64_to_cpu(p_out->port_rcv_packets) >
+			be64_to_cpu(p_in->port_rcv_packets))
 			ibp->z_port_rcv_packets = cntrs.port_rcv_packets;
 	}
 	if (counter_select & IB_PMA_SEL_CONG_ALL) {
-		if (p_out->symbol_error_counter > p_in->symbol_error_counter)
+		if (be16_to_cpu(p_out->symbol_error_counter) >
+			be16_to_cpu(p_in->symbol_error_counter))
 			ibp->z_symbol_error_counter =
 				cntrs.symbol_error_counter;
 		if (p_out->link_error_recovery_counter >
@@ -1785,13 +1792,15 @@ static int pma_set_portcounters_cong(struct ib_perf *pmp,
 		if (p_out->link_downed_counter > p_in->link_downed_counter)
 			ibp->z_link_downed_counter =
 				cntrs.link_downed_counter;
-		if (p_out->port_rcv_errors > p_in->port_rcv_errors)
+		if (be16_to_cpu(p_out->port_rcv_errors) >
+			be16_to_cpu(p_in->port_rcv_errors))
 			ibp->z_port_rcv_errors = cntrs.port_rcv_errors;
-		if (p_out->port_rcv_remphys_errors >
-		    p_in->port_rcv_remphys_errors)
+		if (be16_to_cpu(p_out->port_rcv_remphys_errors) >
+		    be16_to_cpu(p_in->port_rcv_remphys_errors))
 			ibp->z_port_rcv_remphys_errors =
 				cntrs.port_rcv_remphys_errors;
-		if (p_out->port_xmit_discards > p_in->port_xmit_discards)
+		if (be16_to_cpu(p_out->port_xmit_discards) >
+			be16_to_cpu(p_in->port_xmit_discards))
 			ibp->z_port_xmit_discards =
 				cntrs.port_xmit_discards;
 		if ((p_out->lli_ebor_errors & 0xf0) >
@@ -1802,7 +1811,8 @@ static int pma_set_portcounters_cong(struct ib_perf *pmp,
 		    (p_in->lli_ebor_errors & 0x0f))
 			ibp->z_excessive_buffer_overrun_errors =
 				cntrs.excessive_buffer_overrun_errors;
-		if (p_out->vl15_dropped > p_in->vl15_dropped) {
+		if (be16_to_cpu(p_out->vl15_dropped) >
+			be16_to_cpu(p_in->vl15_dropped)) {
 			ibp->n_vl15_dropped = 0;
 			ibp->z_vl15_dropped = cntrs.vl15_dropped;
 		}
@@ -1857,33 +1867,6 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 	struct qib_ibport *ibp = to_iport(ibdev, port);
 	struct qib_pportdata *ppd = ppd_from_ibp(ibp);
 	int ret;
-
-	if (in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE &&
-	    in_mad->mad_hdr.method == IB_MGMT_METHOD_SET &&
-	    in_mad->mad_hdr.attr_id == IB_SMP_ATTR_PORT_INFO) {
-		struct ib_smp *ismp = (struct ib_smp *)in_mad;
-		struct ib_port_info *pip = (struct ib_port_info *)ismp->data;
-
-		if (ismp->hop_cnt > 60 && ismp->hop_ptr > 60) {
-			ppd->std_mode_flag = 1;
-			in_mad->mad_hdr.method = IB_MGMT_METHOD_GET;
-		} else if (((pip->portphysstate_linkdown >> 4) & 0xF) == 3) {
-			/* disabled */
-			ppd->std_mode_flag = 0;
-		}
-	} else if (in_mad->mad_hdr.mgmt_class ==
-			IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE &&
-		   in_mad->mad_hdr.method == IB_MGMT_METHOD_GET &&
-		   in_mad->mad_hdr.attr_id == IB_SMP_ATTR_NODE_INFO &&
-		   ((struct ib_smp*)in_mad)->hop_cnt > 60 &&
-		   ((struct ib_smp*)in_mad)->hop_ptr > 60) {
-		ppd->std_mode_flag = 1;
-		in_mad->mad_hdr.attr_id = IB_SMP_ATTR_PORT_INFO;
-	} else if (in_mad->mad_hdr.mgmt_class ==
-			IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE &&
-		   ((struct ib_smp*)in_mad)->dr_dlid == cpu_to_be16(0x61ff)) {
-		ppd->std_mode_flag = 1;
-	}
 
 	*out_mad = *in_mad;
 	if (smp->class_version != 1) {

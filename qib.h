@@ -112,6 +112,22 @@ struct qib_eep_log_mask {
 };
 
 /*
+ * Indicates to the driver that the loadable parameter could be
+ * configured by it as it was not configured by the user.
+ */
+#define QIB_DRIVER_AUTO_CONFIGURATION 10
+
+#if defined(CONFIG_X86_64) && defined(CONFIG_NUMA)
+#define qib_configure_numa(a) \
+	(a.x86_vendor == X86_VENDOR_INTEL && a.x86 == 6 && a.x86_model == 45)
+#else
+#define qib_configure_numa(a) 0
+#endif
+
+#define QIB_PARAM_ERROR(a) \
+	printk(KERN_ERR QIB_DRV_NAME \
+		": Invalid value %d for loadable param %s\n", qib_##a, #a);
+/*
  * Below contains all data related to a single context (formerly called port).
  */
 struct qib_ctxtdata {
@@ -154,6 +170,8 @@ struct qib_ctxtdata {
 	 */
 	/* instead of calculating it */
 	unsigned ctxt;
+	/* local node of context */
+	int node_id;
 	/* non-zero if ctxt is being shared. */
 	u16 subctxt_cnt;
 	/* non-zero if ctxt is being shared. */
@@ -171,7 +189,9 @@ struct qib_ctxtdata {
 	/* how many alloc_pages() chunks in rcvegrbuf_pages */
 	u32 rcvegrbuf_chunks;
 	/* how many egrbufs per chunk */
-	u32 rcvegrbufs_perchunk;
+	u16 rcvegrbufs_perchunk;
+	/* ilog2 of above */
+	u16 rcvegrbufs_perchunk_shift;
 	/* order for rcvegrbuf_pages */
 	size_t rcvegrbuf_size;
 	/* rcvhdrq size (for freeing) */
@@ -221,6 +241,9 @@ struct qib_ctxtdata {
 	/* ctxt rcvhdrq head offset */
 	u32 head;
 	u32 pkt_count;
+	/* lookaside fields */
+	struct qib_qp *lookaside_qp;
+	u32 lookaside_qpn;
 	/* QPs waiting for context processing */
 	struct list_head qp_wait_list;
 };
@@ -419,6 +442,14 @@ struct qib_verbs_txreq {
 /* how often we check for packet activity for "power on hours (in seconds) */
 #define ACTIVITY_TIMER 5
 
+#define MAX_NAME_SIZE 64
+struct qib_msix_entry {
+	struct msix_entry msix;
+	void *arg;
+	char name[MAX_NAME_SIZE];
+	cpumask_var_t mask;
+};
+
 /* Below is an opaque struct. Each chip (device) can maintain
  * private data needed for its operation, but not germane to the
  * rest of the driver.  For convenience, we define another that
@@ -514,8 +545,6 @@ struct qib_pportdata {
 	/* qib_lflags driver is waiting for */
 	u32 state_wanted;
 	spinlock_t lflags_lock;
-	/* number of (port-specific) interrupts for this port -- saturates... */
-	u32 int_counter;
 
 	/* ref count for each pkey */
 	atomic_t pkeyrefs[4];
@@ -527,24 +556,26 @@ struct qib_pportdata {
 	u64 *statusp;
 
 	/* SendDMA related entries */
-	spinlock_t            sdma_lock;
-	struct qib_sdma_state sdma_state;
-	unsigned long         sdma_buf_jiffies;
-	struct qib_sdma_desc *sdma_descq;
-	u64                   sdma_descq_added;
-	u64                   sdma_descq_removed;
-	u16                   sdma_descq_cnt;
-	u16                   sdma_descq_tail;
-	u16                   sdma_descq_head;
-	u16                   sdma_next_intr;
-	u16                   sdma_reset_wait;
-	u8                    sdma_generation;
-	struct tasklet_struct sdma_sw_clean_up_task;
-	struct list_head      sdma_activelist;
 
+	/* read mostly */
+	struct qib_sdma_desc *sdma_descq;
+	struct qib_sdma_state sdma_state;
 	dma_addr_t       sdma_descq_phys;
 	volatile __le64 *sdma_head_dma; /* DMA'ed by chip */
 	dma_addr_t       sdma_head_phys;
+	u16                   sdma_descq_cnt;
+
+	/* read/write using lock */
+	spinlock_t            sdma_lock ____cacheline_aligned_in_smp;
+	struct list_head      sdma_activelist;
+	u64                   sdma_descq_added;
+	u64                   sdma_descq_removed;
+	u16                   sdma_descq_tail;
+	u16                   sdma_descq_head;
+	u8                    sdma_generation;
+
+	struct tasklet_struct sdma_sw_clean_up_task
+		____cacheline_aligned_in_smp;
 
 	wait_queue_head_t state_wait; /* for state_wanted */
 
@@ -616,7 +647,6 @@ struct qib_pportdata {
 	u16 led_override_timeoff; /* delta to next timer event */
 	u8 led_override_vals[2]; /* Alternates per blink-frame */
 	u8 led_override_phase; /* Just counts, LSB picks from vals[] */
-	u8 std_mode_flag;
 	atomic_t led_override_timer_active;
 	/* Used to flash LEDs in override mode */
 	struct timer_list led_override_timer;
@@ -667,6 +697,12 @@ struct qib_devdata {
 
 	/* mem-mapped pointer to base of chip regs */
 	u64 __iomem *kregbase;
+
+	/* mem-mapped base of chip regs plus offset of the SendBufAvail0
+	 * register
+	 */
+	u64 sendbufavail0;
+
 	/* end of mem-mapped chip space excluding sendbuf and user regs */
 	u64 __iomem *kregend;
 	/* physical address of chip for io_remap, etc. */
@@ -935,7 +971,9 @@ struct qib_devdata {
 	/* chip address space used by 4k pio buffers */
 	u32 align4k;
 	/* size of each rcvegrbuffer */
-	u32 rcvegrbufsize;
+	u16 rcvegrbufsize;
+	/* log2 of above */
+	u16 rcvegrbufsize_shift;
 	/* localbus width (1, 2,4,8,16,32) from config space  */
 	u32 lbus_width;
 	/* localbus speed in MHz */
@@ -1011,6 +1049,8 @@ struct qib_devdata {
 	u8 psxmitwait_supported;
 	/* cycle length of PS* counters in HW (in picoseconds) */
 	u16 psxmitwait_check_rate;
+	/* high volume overflow errors defered to tasklet */
+	struct tasklet_struct error_tasklet;
 };
 
 /* hol_state values */
@@ -1089,7 +1129,7 @@ int qib_create_rcvhdrq(struct qib_devdata *, struct qib_ctxtdata *);
 int qib_setup_eagerbufs(struct qib_ctxtdata *);
 void qib_set_ctxtcnt(struct qib_devdata *);
 int qib_create_ctxts(struct qib_devdata *dd);
-struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32);
+struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32, int);
 void qib_init_pportdata(struct qib_pportdata *, struct qib_devdata *, u8, u8);
 void qib_free_ctxtdata(struct qib_devdata *, struct qib_ctxtdata *);
 
@@ -1343,7 +1383,7 @@ int qib_pcie_init(struct pci_dev *, const struct pci_device_id *);
 int qib_pcie_ddinit(struct qib_devdata *, struct pci_dev *,
 		    const struct pci_device_id *);
 void qib_pcie_ddcleanup(struct qib_devdata *);
-int qib_pcie_params(struct qib_devdata *, u32, u32 *, struct msix_entry *);
+int qib_pcie_params(struct qib_devdata *, u32, u32 *, struct qib_msix_entry *);
 int qib_reinit_intr(struct qib_devdata *);
 void qib_enable_intx(struct pci_dev *);
 void qib_nomsi(struct qib_devdata *);
@@ -1378,6 +1418,8 @@ extern unsigned qib_n_krcv_queues;
 extern unsigned qib_sdma_fetch_arb;
 extern unsigned qib_compat_ddr_negotiate;
 extern int qib_special_trigger;
+extern unsigned qib_pio_avail_bits;
+extern unsigned qib_rcvhdrpoll;
 
 extern struct mutex qib_mutex;
 
@@ -1463,6 +1505,7 @@ extern struct mutex qib_mutex;
 struct qib_hwerror_msgs {
 	u64 mask;
 	const char *msg;
+	size_t sz;
 };
 
 #define QLOGIC_IB_HWE_MSG(a, b) { .mask = a, .msg = b }

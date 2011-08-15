@@ -1014,7 +1014,6 @@ static int chk_6120_linkrecovery(struct qib_devdata *dd, u64 ibcs)
 		/* and no more until active again */
 		dd->cspec->lastlinkrecov = 0;
 		qib_set_linkstate(dd->pport, QIB_IB_LINKDOWN);
-		dd->pport->std_mode_flag = 0;
 		ret = 0;
 	}
 	if (ibstate == IB_PORT_ACTIVE)
@@ -3395,6 +3394,8 @@ static int init_6120_variables(struct qib_devdata *dd)
 	/* we always allocate at least 2048 bytes for eager buffers */
 	ret = ib_mtu_enum_to_int(qib_ibmtu);
 	dd->rcvegrbufsize = ret != -1 ? max(ret, 2048) : QIB_DEFAULT_MTU;
+	BUG_ON(!is_power_of_2(dd->rcvegrbufsize));
+	dd->rcvegrbufsize_shift = ilog2(dd->rcvegrbufsize);
 
 	qib_6120_tidtemplate(dd);
 
@@ -3424,6 +3425,8 @@ static int init_6120_variables(struct qib_devdata *dd)
 		ret = init_chip_wc_pat(dd, 0);
 		if (ret)
 			goto bail;
+		dd->sendbufavail0 = qib_read_kreg32(dd, kr_sendregbase) +
+			(u64)dd->kregbase;
 	}
 	set_6120_baseaddrs(dd); /* set chip access pointers now */
 

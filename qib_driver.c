@@ -290,10 +290,13 @@ bail:
  */
 static inline void *qib_get_egrbuf(const struct qib_ctxtdata *rcd, u32 etail)
 {
-	const u32 chunk = etail / rcd->rcvegrbufs_perchunk;
-	const u32 idx =  etail % rcd->rcvegrbufs_perchunk;
+	const u32 chunk = etail >> rcd->rcvegrbufs_perchunk_shift;
+	const u32 idx =  etail & ((u32)rcd->rcvegrbufs_perchunk - 1);
+	void *rval;
 
-	return rcd->rcvegrbuf[chunk] + idx * rcd->dd->rcvegrbufsize;
+	rval = rcd->rcvegrbuf[chunk] + (idx << rcd->dd->rcvegrbufsize_shift);
+	qib_eager_prefetch(rval);
+	return rval;
 }
 
 /**
@@ -368,7 +371,6 @@ static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		u32 opcode;
 		u32 psn;
 		int diff;
-		unsigned long flags;
 
 		/* Sanity check packet */
 		if (tlen < 24)
@@ -423,7 +425,6 @@ static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 
 			switch (qp->ibqp.qp_type) {
 			case IB_QPT_RC:
-				spin_lock_irqsave(&qp->s_lock, flags);
 				ruc_res =
 					qib_ruc_check_hdr(
 						ibp, hdr,
@@ -431,11 +432,8 @@ static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 						qp,
 						be32_to_cpu(ohdr->bth[0]));
 				if (ruc_res) {
-					spin_unlock_irqrestore(&qp->s_lock,
-							       flags);
 					goto unlock;
 				}
-				spin_unlock_irqrestore(&qp->s_lock, flags);
 
 				/* Only deal with RDMA Writes for now */
 				if (opcode <
@@ -669,6 +667,15 @@ move_along:
 			dd->f_update_usrhead(rcd, lval, updegr, etail, i);
 			updegr = 0;
 		}
+	}
+	/*
+	 * Notify qib_destroy_qp() if it is waiting
+	 * for lookaside_qp to finish.
+	 */
+	if (rcd->lookaside_qp) {
+		if (atomic_dec_and_test(&rcd->lookaside_qp->refcount))
+			wake_up(&rcd->lookaside_qp->wait);
+		rcd->lookaside_qp = NULL;
 	}
 
 	rcd->head = l;
