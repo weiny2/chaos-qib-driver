@@ -409,6 +409,7 @@ again:
 	if (!qp || !(ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK) ||
 	    qp->ibqp.qp_type != sqp->ibqp.qp_type) {
 		ibp->n_pkt_drops++;
+		ibp->pkt_drop_det.n_ruc_loopback++;
 		/*
 		 * For RC, the requester would timeout and retry so
 		 * shortcut the timeouts and just signal too many retries.

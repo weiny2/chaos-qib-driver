@@ -299,6 +299,7 @@ inv:
 			goto rdma_first;
 
 		default:
+			ibp->pkt_drop_det.n_uc_seq_error++;
 			goto drop;
 		}
 	}
@@ -356,8 +357,10 @@ send_first:
 			ret = qib_get_rwqe(qp, 0);
 			if (ret < 0)
 				goto op_err;
-			if (!ret)
+			if (!ret) {
+				ibp->pkt_drop_det.n_uc_get_rwqe++;
 				goto drop;
+			}
 			/* qp->s_rdma_read_sge will be the owner
 			   of the mr references. */
 			qp->s_rdma_read_sge = qp->r_sge;
@@ -433,6 +436,7 @@ last_imm:
 rdma_first:
 		if (unlikely(!(qp->qp_access_flags &
 			       IB_ACCESS_REMOTE_WRITE))) {
+			ibp->pkt_drop_det.n_uc_not_rem_write++;
 			goto drop;
 		}
 		reth = &ohdr->u.rc.reth;
@@ -448,8 +452,10 @@ rdma_first:
 			/* Check rkey */
 			ok = qib_rkey_ok(qp, &qp->r_sge.sge, qp->r_len,
 					 vaddr, rkey, IB_ACCESS_REMOTE_WRITE);
-			if (unlikely(!ok))
+			if (unlikely(!ok)) {
+				ibp->pkt_drop_det.n_uc_inv_rkey++;
 				goto drop;
+			}
 			qp->r_sge.num_sge = 1;
 			qp->r_sge.total_len = be32_to_cpu(reth->length);
 		} else {
@@ -468,11 +474,15 @@ rdma_first:
 		/* FALLTHROUGH */
 	case OP(RDMA_WRITE_MIDDLE):
 		/* Check for invalid length PMTU or posted rwqe len. */
-		if (unlikely(tlen != (hdrsize + pmtu + 4)))
+		if (unlikely(tlen != (hdrsize + pmtu + 4))) {
+			ibp->pkt_drop_det.n_uc_tlen_err++;
 			goto drop;
+		}
 		qp->r_rcv_len += pmtu;
-		if (unlikely(qp->r_rcv_len > qp->r_len))
+		if (unlikely(qp->r_rcv_len > qp->r_len)) {
+			ibp->pkt_drop_det.n_uc_rcv_len_err++;
 			goto drop;
+		}
 		qib_copy_sge(&qp->r_sge, data, pmtu, 1);
 		break;
 
@@ -490,8 +500,10 @@ rdma_last_imm:
 			goto drop;
 		/* Don't count the CRC. */
 		tlen -= (hdrsize + pad + 4);
-		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
+		if (unlikely(tlen + qp->r_rcv_len != qp->r_len)) {
+			ibp->pkt_drop_det.n_uc_tlen_err++;
 			goto drop;
+		}
 		if (test_and_clear_bit(QIB_R_REWIND_SGE, &qp->r_aflags))
 			while (qp->s_rdma_read_sge.num_sge) {
 				atomic_dec(&qp->s_rdma_read_sge.sge.mr->
@@ -504,8 +516,10 @@ rdma_last_imm:
 			ret = qib_get_rwqe(qp, 1);
 			if (ret < 0)
 				goto op_err;
-			if (!ret)
+			if (!ret) {
+				ibp->pkt_drop_det.n_uc_get_rwqe++;
 				goto drop;
+			}
 		}
 		wc.byte_len = qp->r_len;
 		wc.opcode = IB_WC_RECV_RDMA_WITH_IMM;
@@ -517,12 +531,16 @@ rdma_last:
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/* Check for invalid length. */
 		/* XXX LAST len should be >= 1 */
-		if (unlikely(tlen < (hdrsize + pad + 4)))
+		if (unlikely(tlen < (hdrsize + pad + 4))) {
+			ibp->pkt_drop_det.n_uc_tlen_err++;
 			goto drop;
+		}
 		/* Don't count the CRC. */
 		tlen -= (hdrsize + pad + 4);
-		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
+		if (unlikely(tlen + qp->r_rcv_len != qp->r_len)) {
+			ibp->pkt_drop_det.n_uc_tlen_err++;
 			goto drop;
+		}
 		qib_copy_sge(&qp->r_sge, data, tlen, 1);
 		while (qp->r_sge.num_sge) {
 			atomic_dec(&qp->r_sge.sge.mr->refcount);
@@ -533,6 +551,7 @@ rdma_last:
 
 	default:
 		/* Drop packet for unknown opcodes. */
+		ibp->pkt_drop_det.n_uc_unk_opcode++;
 		goto drop;
 	}
 	qp->r_psn++;

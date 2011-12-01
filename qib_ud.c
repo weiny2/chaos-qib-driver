@@ -60,11 +60,13 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 
 	qp = qib_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
 	if (!qp) {
+		ibp->pkt_drop_det.n_ud_inv_qpn++;
 		ibp->n_pkt_drops++;
 		return;
 	}
 	if (qp->ibqp.qp_type != sqp->ibqp.qp_type ||
 	    !(ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK)) {
+		ibp->pkt_drop_det.n_ud_inv_qptype++;
 		ibp->n_pkt_drops++;
 		goto drop;
 	}
@@ -152,6 +154,7 @@ static void qib_ud_loopback(struct qib_qp *sqp, struct qib_swqe *swqe)
 	/* Silently drop packets which are too big. */
 	if (unlikely(wc.byte_len > qp->r_len)) {
 		qp->r_flags |= QIB_R_REUSE_SGE;
+		ibp->pkt_drop_det.n_ud_pkt_too_big++;
 		ibp->n_pkt_drops++;
 		goto bail_unlock;
 	}
@@ -450,8 +453,10 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	 * and drop incomplete packets.
 	 */
 	pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
-	if (unlikely(tlen < (hdrsize + pad + 4)))
+	if (unlikely(tlen < (hdrsize + pad + 4))) {
+		ibp->pkt_drop_det.n_ud_tlen_err++;
 		goto drop;
+	}
 
 	tlen -= hdrsize + pad + 4;
 
@@ -461,8 +466,10 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	 */
 	if (qp->ibqp.qp_num) {
 		if (unlikely(hdr->lrh[1] == IB_LID_PERMISSIVE ||
-			     hdr->lrh[3] == IB_LID_PERMISSIVE))
+			     hdr->lrh[3] == IB_LID_PERMISSIVE)) {
+			ibp->pkt_drop_det.n_ud_perm_lid_err++;
 			goto drop;
+		}
 		if (qp->ibqp.qp_num > 1) {
 			u16 pkey1, pkey2;
 
@@ -488,19 +495,25 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		/* Drop invalid MAD packets (see 13.5.3.1). */
 		if (unlikely(qp->ibqp.qp_num == 1 &&
 			     (tlen != 256 ||
-			      (be16_to_cpu(hdr->lrh[0]) >> 12) == 15)))
+			      (be16_to_cpu(hdr->lrh[0]) >> 12) == 15))) {
+			ibp->pkt_drop_det.n_ud_inv_mad++;
 			goto drop;
+		}
 	} else {
 		struct ib_smp *smp;
 
 		/* Drop invalid MAD packets (see 13.5.3.1). */
-		if (tlen != 256 || (be16_to_cpu(hdr->lrh[0]) >> 12) != 15)
+		if (tlen != 256 || (be16_to_cpu(hdr->lrh[0]) >> 12) != 15) {
+			ibp->pkt_drop_det.n_ud_inv_mad++;
 			goto drop;
+		}
 		smp = (struct ib_smp *) data;
 		if ((hdr->lrh[1] == IB_LID_PERMISSIVE ||
 		     hdr->lrh[3] == IB_LID_PERMISSIVE) &&
-		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
+		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
+			ibp->pkt_drop_det.n_ud_inv_mad++;
 			goto drop;
+		}
 	}
 
 	/*
@@ -516,8 +529,10 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	} else if (opcode == IB_OPCODE_UD_SEND_ONLY) {
 		wc.ex.imm_data = 0;
 		wc.wc_flags = 0;
-	} else
+	} else {
+		ibp->pkt_drop_det.n_ud_unk_opcode++;
 		goto drop;
+	}
 
 	/*
 	 * A GRH is expected to preceed the data even if not
@@ -547,6 +562,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	/* Silently drop packets which are too big. */
 	if (unlikely(wc.byte_len > qp->r_len)) {
 		qp->r_flags |= QIB_R_REUSE_SGE;
+		ibp->pkt_drop_det.n_ud_pkt_too_big++;
 		goto drop;
 	}
 	if (has_grh) {
@@ -584,6 +600,8 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	qib_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
 		     (ohdr->bth[0] &
 			cpu_to_be32(IB_BTH_SOLICITED)) != 0);
+
+	ibp->pkt_drop_det.n_ud_inv_wrid++;
 
 drop:
 	ibp->n_pkt_drops++;

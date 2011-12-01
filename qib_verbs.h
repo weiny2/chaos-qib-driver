@@ -697,6 +697,35 @@ struct qib_ibport {
 	u32 n_other_naks;
 	u32 n_loop_pkts;
 	u32 n_pkt_drops;
+
+	struct {
+		u32 n_inv_rec_state;
+		u32 n_bad_pqkey;
+		u32 n_ruc_loopback;
+		u32 n_uc_seq_error;
+		u32 n_uc_get_rwqe;
+		u32 n_uc_not_rem_write;
+		u32 n_uc_inv_rkey;
+		u32 n_uc_tlen_err;
+		u32 n_uc_rcv_len_err;
+		u32 n_uc_unk_opcode;
+		u32 n_ud_inv_qpn;
+		u32 n_ud_inv_qptype;
+		u32 n_ud_pkt_too_big;
+		u32 n_ud_tlen_err;
+		u32 n_ud_perm_lid_err;
+		u32 n_ud_inv_mad;
+		u32 n_ud_unk_opcode;
+		u32 n_ud_inv_wrid;
+		u32 n_qp_inv_state;
+		u32 n_qp_tlen_err;
+		u32 n_qp_inv_lid;
+		u32 n_qp_inv_grh;
+		u32 n_qp_mcast_inv_grh;
+		u32 n_qp_mcast_not_found;
+		u32 n_qp_inv_qp;
+	} pkt_drop_det;
+
 	u32 n_vl15_dropped;
 	u32 n_rc_timeouts;
 	u32 n_dmawait;
