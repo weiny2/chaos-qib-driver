@@ -700,6 +700,7 @@ static void qib_qp_rcv(struct qib_ctxtdata *rcd, struct qib_ib_header *hdr,
 
 	/* Check for valid receive state. */
 	if (!(ib_qib_state_ops[qp->state] & QIB_PROCESS_RECV_OK)) {
+		ibp->pkt_drop_det.n_qp_inv_state++;
 		ibp->n_pkt_drops++;
 		goto unlock;
 	}
@@ -756,15 +757,19 @@ void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
 	u16 lid;
 
 	/* 24 == LRH+BTH+CRC */
-	if (unlikely(tlen < 24))
+	if (unlikely(tlen < 24)) {
+		ibp->pkt_drop_det.n_qp_tlen_err++;
 		goto drop;
+	}
 
 	/* Check for a valid destination LID (see ch. 7.11.1). */
 	lid = be16_to_cpu(hdr->lrh[1]);
 	if (lid < QIB_MULTICAST_LID_BASE) {
 		lid &= ~((1 << ppd->lmc) - 1);
-		if (unlikely(lid != ppd->lid))
+		if (unlikely(lid != ppd->lid)) {
+			ibp->pkt_drop_det.n_qp_inv_lid++;
 			goto drop;
+		}
 	}
 
 	/* Check for GRH */
@@ -775,13 +780,19 @@ void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
 		u32 vtf;
 
 		ohdr = &hdr->u.l.oth;
-		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
+		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR) {
+			ibp->pkt_drop_det.n_qp_inv_grh++;
 			goto drop;
+		}
 		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
-		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
+		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION) {
+			ibp->pkt_drop_det.n_qp_inv_grh++;
 			goto drop;
-	} else
+		}
+	} else {
+		ibp->pkt_drop_det.n_qp_inv_grh++;
 		goto drop;
+	}
 
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
 	ibp->opstats[opcode & 0x7f].n_bytes += tlen;
@@ -797,11 +808,15 @@ void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
 		struct qib_mcast *mcast;
 		struct qib_mcast_qp *p;
 
-		if (lnh != QIB_LRH_GRH)
+		if (lnh != QIB_LRH_GRH) {
+			ibp->pkt_drop_det.n_qp_mcast_inv_grh++;
 			goto drop;
+		}
 		mcast = qib_mcast_find(ibp, &hdr->u.l.grh.dgid);
-		if (mcast == NULL)
+		if (mcast == NULL) {
+			ibp->pkt_drop_det.n_qp_mcast_not_found++;
 			goto drop;
+		}
 		ibp->n_multicast_rcv++;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list)
 			qib_qp_rcv(rcd, hdr, 1, data, tlen, p->qp);
@@ -813,8 +828,10 @@ void qib_ib_rcv(struct qib_ctxtdata *rcd, void *rhdr, void *data, u32 tlen)
 			wake_up(&mcast->wait);
 	} else {
 		qp = qib_lookup_qpn(ibp, qp_num);
-		if (!qp)
+		if (!qp) {
+			ibp->pkt_drop_det.n_qp_inv_qp++;
 			goto drop;
+		}
 		ibp->n_unicast_rcv++;
 		qib_qp_rcv(rcd, hdr, lnh == QIB_LRH_GRH, data, tlen, qp);
 		/*

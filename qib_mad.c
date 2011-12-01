@@ -137,6 +137,7 @@ void qib_bad_pqkey(struct qib_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 	else
 		ibp->qkey_violations++;
 	ibp->n_pkt_drops++;
+	ibp->pkt_drop_det.n_bad_pqkey++;
 
 	/* Send violation trap */
 	data.generic_type = IB_NOTICE_TYPE_SECURITY;

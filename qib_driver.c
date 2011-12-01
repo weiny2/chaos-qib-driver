@@ -417,6 +417,7 @@ static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 			/* Check for valid receive state. */
 			if (!(ib_qib_state_ops[qp->state] &
 			      QIB_PROCESS_RECV_OK)) {
+				ibp->pkt_drop_det.n_inv_rec_state++;
 				ibp->n_pkt_drops++;
 				goto unlock;
 			}

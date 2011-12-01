@@ -508,7 +508,33 @@ static ssize_t show_stats(struct device *device,
 			       "wait TX     %d\n"
 			       "unaligned   %d\n"
 			       "loop pkts   %d\n"
-			       "PKT drops   %d\n",
+			       "PKT drops   %d\n"
+			       "    drop details\n"
+			       "        n_inv_rec_state       %d\n"
+			       "        n_bad_pqkey           %d\n"
+			       "        n_ruc_loopback        %d\n"
+			       "        n_uc_seq_error        %d\n"
+			       "        n_uc_get_rwqe         %d\n"
+			       "        n_uc_not_rem_write    %d\n"
+			       "        n_uc_inv_rkey         %d\n"
+			       "        n_uc_tlen_err         %d\n"
+			       "        n_uc_rcv_len_err      %d\n"
+			       "        n_uc_unk_opcode       %d\n"
+			       "        n_ud_inv_qpn          %d\n"
+			       "        n_ud_inv_qptype       %d\n"
+			       "        n_ud_pkt_too_big      %d\n"
+			       "        n_ud_tlen_err         %d\n"
+			       "        n_ud_perm_lid_err     %d\n"
+			       "        n_ud_inv_mad          %d\n"
+			       "        n_ud_unk_opcode       %d\n"
+			       "        n_ud_inv_wrid         %d\n"
+			       "        n_qp_inv_state        %d\n"
+			       "        n_qp_tlen_err         %d\n"
+			       "        n_qp_inv_lid          %d\n"
+			       "        n_qp_inv_grh          %d\n"
+			       "        n_qp_mcast_inv_grh    %d\n"
+			       "        n_qp_mcast_not_found  %d\n"
+			       "        n_qp_inv_qp           %d\n",
 			       dd->pport[pidx].port,
 			       ibp->n_rc_timeouts, ibp->n_rc_resends,
 			       ibp->n_rc_qacks, ibp->n_seq_naks,
@@ -517,7 +543,33 @@ static ssize_t show_stats(struct device *device,
 			       ibp->n_rc_dupreq, ibp->n_rc_seqnak,
 			       dev->n_piowait, ibp->n_dmawait, dev->n_txwait,
 			       ibp->n_unaligned, ibp->n_loop_pkts,
-			       ibp->n_pkt_drops);
+			       ibp->n_pkt_drops,
+			       ibp->pkt_drop_det.n_inv_rec_state,
+			       ibp->pkt_drop_det.n_bad_pqkey,
+			       ibp->pkt_drop_det.n_ruc_loopback,
+			       ibp->pkt_drop_det.n_uc_seq_error,
+			       ibp->pkt_drop_det.n_uc_get_rwqe,
+			       ibp->pkt_drop_det.n_uc_not_rem_write,
+			       ibp->pkt_drop_det.n_uc_inv_rkey,
+			       ibp->pkt_drop_det.n_uc_tlen_err,
+			       ibp->pkt_drop_det.n_uc_rcv_len_err,
+			       ibp->pkt_drop_det.n_uc_unk_opcode,
+			       ibp->pkt_drop_det.n_ud_inv_qpn,
+			       ibp->pkt_drop_det.n_ud_inv_qptype,
+			       ibp->pkt_drop_det.n_ud_pkt_too_big,
+			       ibp->pkt_drop_det.n_ud_tlen_err,
+			       ibp->pkt_drop_det.n_ud_perm_lid_err,
+			       ibp->pkt_drop_det.n_ud_inv_mad,
+			       ibp->pkt_drop_det.n_ud_unk_opcode,
+			       ibp->pkt_drop_det.n_ud_inv_wrid,
+			       ibp->pkt_drop_det.n_qp_inv_state,
+			       ibp->pkt_drop_det.n_qp_tlen_err,
+			       ibp->pkt_drop_det.n_qp_inv_lid,
+			       ibp->pkt_drop_det.n_qp_inv_grh,
+			       ibp->pkt_drop_det.n_qp_mcast_inv_grh,
+			       ibp->pkt_drop_det.n_qp_mcast_not_found,
+			       ibp->pkt_drop_det.n_qp_inv_qp);
+
 		for (i = 0; i < ARRAY_SIZE(ibp->opstats); i++) {
 			const struct qib_opcode_stats *si = &ibp->opstats[i];
 
