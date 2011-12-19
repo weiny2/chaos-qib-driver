@@ -577,8 +577,11 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 		if (--qp->r_sge.num_sge)
 			qp->r_sge.sge = *qp->r_sge.sg_list++;
 	}
-	if (!test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags))
+	if (!test_and_clear_bit(QIB_R_WRID_VALID, &qp->r_aflags)) {
+		ibp->pkt_drop_det.n_ud_inv_wrid++;
+		ibp->n_pkt_drops++;
 		return;
+	}
 	wc.wr_id = qp->r_wr_id;
 	wc.status = IB_WC_SUCCESS;
 	wc.opcode = IB_WC_RECV;
@@ -600,9 +603,7 @@ void qib_ud_rcv(struct qib_ibport *ibp, struct qib_ib_header *hdr,
 	qib_cq_enter(to_icq(qp->ibqp.recv_cq), &wc,
 		     (ohdr->bth[0] &
 			cpu_to_be32(IB_BTH_SOLICITED)) != 0);
-
-	ibp->pkt_drop_det.n_ud_inv_wrid++;
-
+	return;
 drop:
 	ibp->n_pkt_drops++;
 }
