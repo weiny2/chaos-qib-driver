@@ -477,6 +477,44 @@ static const char *qp_type_str[] = {
 	"SMI", "GSI", "RC", "UC", "UD",
 };
 
+static ssize_t show_used_nctxts(struct device *device,
+			  struct device_attribute *attr, char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct qib_devdata *dd = dd_from_dev(dev);
+	unsigned i;
+	unsigned cnt = 0;
+
+	for (i = dd->first_user_ctxt; i < dd->cfgctxts; i++) {
+		if (!dd->rcd[i])
+			continue;
+		cnt++;
+	}
+	return (sprintf(buf, "%u\n", cnt));
+}
+
+static ssize_t show_used_ctxts(struct device *device,
+			  struct device_attribute *attr, char *buf)
+{
+	struct qib_ibdev *dev =
+		container_of(device, struct qib_ibdev, ibdev.dev);
+	struct qib_devdata *dd = dd_from_dev(dev);
+	unsigned i;
+	int len = 0;
+
+	len += sprintf(buf + len, "User Contexts in use: (num:#open:pkt_count)\n");
+	for (i = dd->first_user_ctxt; i < dd->cfgctxts; i++) {
+		if (!dd->rcd[i])
+			continue;
+		len += sprintf(buf + len, " %u:%u:%u\n",
+					i,
+					dd->rcd[i]->cnt,
+					dd->rcd[i]->pkt_count);
+	}
+	return (len);
+}
+
 static ssize_t show_stats(struct device *device,
 			  struct device_attribute *attr, char *buf)
 {
@@ -780,6 +818,8 @@ static DEVICE_ATTR(hw_rev, S_IRUGO, show_rev, NULL);
 static DEVICE_ATTR(hca_type, S_IRUGO, show_hca, NULL);
 static DEVICE_ATTR(board_id, S_IRUGO, show_hca, NULL);
 static DEVICE_ATTR(stats, S_IRUGO, show_stats, NULL);
+static DEVICE_ATTR(used_ctxts, S_IRUGO, show_used_ctxts, NULL);
+static DEVICE_ATTR(used_nctxts, S_IRUGO, show_used_nctxts, NULL);
 static DEVICE_ATTR(version, S_IRUGO, show_version, NULL);
 static DEVICE_ATTR(nctxts, S_IRUGO, show_nctxts, NULL);
 static DEVICE_ATTR(nfreectxts, S_IRUGO, show_nfreectxts, NULL);
@@ -795,6 +835,8 @@ static struct device_attribute *qib_attributes[] = {
 	&dev_attr_hca_type,
 	&dev_attr_board_id,
 	&dev_attr_stats,
+	&dev_attr_used_ctxts,
+	&dev_attr_used_nctxts,
 	&dev_attr_version,
 	&dev_attr_nctxts,
 	&dev_attr_nfreectxts,
